@@ -1,4 +1,4 @@
-export const SINGLE_CHOICE_LABEL = "Single choice";
+﻿export const SINGLE_CHOICE_LABEL = "Single choice";
 export const MULTIPLE_CHOICE_LABEL = "Multiple choice";
 
 export const normalizeText = (value) =>
@@ -33,12 +33,16 @@ export const getQuestionTypeLabel = (type) =>
 const uniqueAnswers = (answers) =>
   [...new Set(answers.map(item => String(item).trim()).filter(Boolean))];
 
-const OPTION_CODE_TO_INDEX = {
-  A: 0,
-  B: 1,
-  C: 2,
-  D: 3,
+const generateOptionCodeToIndex = () => {
+  const mapping = {};
+  for (let i = 0; i < 26; i++) {
+    const letter = String.fromCharCode(65 + i);
+    mapping[letter] = i;
+  }
+  return mapping;
 };
+
+const OPTION_CODE_TO_INDEX = generateOptionCodeToIndex();
 
 const splitDelimitedAnswerText = (answer) =>
   String(answer ?? "")

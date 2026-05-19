@@ -48,6 +48,7 @@ blob-report/
 .cache/
 .parcel-cache/
 .eslintcache
+.serena/
 
 # Deployment local state
 .vercel/

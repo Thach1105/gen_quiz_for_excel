@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { CheckCircle2, ChevronDown, ChevronUp, Download, FileQuestion } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -40,6 +40,13 @@ export default function PreviewSection({ questions = [] }) {
     link.download = `quiz-${Date.now()}.json`;
     link.click();
     URL.revokeObjectURL(url);
+  };
+
+  const getGridCols = (optionCount) => {
+    if (optionCount <= 2) return "";
+    if (optionCount <= 4) return "sm:grid-cols-2";
+    if (optionCount <= 6) return "sm:grid-cols-2 md:grid-cols-3";
+    return "sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4";
   };
 
   if (questions.length === 0) {
@@ -109,7 +116,7 @@ export default function PreviewSection({ questions = [] }) {
                         {item.id || idx + 1}
                       </span>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium text-gray-900">{item.question}</p>
+                        <p className="line-clamp-2 whitespace-pre-line font-medium text-gray-900">{item.question}</p>
                         <div className="mt-1 flex flex-wrap items-center gap-2">
                           <span className="text-xs text-gray-500">{item.options?.length || 0} đáp án</span>
                           <span className="text-xs text-gray-400">•</span>
@@ -141,10 +148,10 @@ export default function PreviewSection({ questions = [] }) {
                       >
                         <div className="border-t border-gray-100 px-4 pb-4 pt-2">
                           <p className="mb-3 text-sm font-semibold text-gray-700">Câu hỏi:</p>
-                          <p className="mb-4 text-gray-900">{item.question}</p>
+                          <p className="mb-4 whitespace-pre-line text-gray-900">{item.question}</p>
 
                           <p className="mb-3 text-sm font-semibold text-gray-700">Đáp án:</p>
-                          <div className="grid gap-2 sm:grid-cols-2">
+                          <div className={`grid gap-2 ${getGridCols(item.options?.length || 0)}`}>
                             {item.options && item.options.map((option, optIdx) => {
                               const isCorrect = getCorrectAnswers(item).includes(option);
                               return (
@@ -156,8 +163,8 @@ export default function PreviewSection({ questions = [] }) {
                                       : "border-gray-200 bg-gray-50 text-gray-700"
                                   }`}
                                 >
-                                  <span>{option}</span>
-                                  {isCorrect && <CheckCircle2 className="h-4 w-4 text-emerald-600" />}
+                                  <span className="whitespace-pre-line">{option}</span>
+                                  {isCorrect && <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-emerald-600" />}
                                 </div>
                               );
                             })}
@@ -166,7 +173,7 @@ export default function PreviewSection({ questions = [] }) {
                           {item.explanation && (
                             <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900">
                               <span className="font-bold">Giải thích: </span>
-                              {item.explanation}
+                              <span className="whitespace-pre-line">{item.explanation}</span>
                             </div>
                           )}
                         </div>

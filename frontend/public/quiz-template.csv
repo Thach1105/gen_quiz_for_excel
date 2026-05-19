@@ -1,11 +1,16 @@
-Câu hỏi,A,B,C,D,Đáp án đúng,Loại câu,Giải thích
-"Tá dược nào thường được dùng làm tá dược rã trong viên nén?",Lactose,Crospovidon,Talc,Parafin,B,Single choice,"Crospovidon là tá dược siêu rã thường dùng trong viên nén."
-"Các trường nào cần có trong file Excel để tạo quiz?",Câu hỏi,Đáp án A-D,Đáp án đúng,Ảnh đại diện,A;B;C,Multiple choice,"File cần câu hỏi, các lựa chọn và đáp án đúng; ảnh đại diện không bắt buộc."
-"Quiz có thể được xuất ra định dạng nào?",PDF,Link online,JSON,Tất cả đều đúng,D,Single choice,"Hệ thống hiện ưu tiên link online và JSON, các định dạng khác có thể mở rộng."
-"2 + 2 = ?",3,4,5,6,B,Single choice,"2 + 2 bằng 4."
-"Thủ đô của Việt Nam là?",Hà Nội,TP.HCM,Đà Nẵng,Huế,A,Single choice,"Hà Nội là thủ đô của Việt Nam."
-"Màu của bầu trời vào ngày nắng thường là?",Xanh,Đỏ,Vàng,Tím,A,Single choice,"Ánh sáng tán xạ khiến bầu trời thường có màu xanh."
-"Python là gì?",Ngôn ngữ lập trình,Con rắn,Thương hiệu,Tất cả đều đúng,D,Single choice,"Python vừa là tên ngôn ngữ lập trình, vừa là tên một loài rắn và có thể là tên thương hiệu."
-"React là?",Library JavaScript,Framework,Database,Server,A,Single choice,"React là thư viện JavaScript để xây dựng giao diện người dùng."
-"MongoDB là?",SQL Database,NoSQL Database,Programming Language,Framework,B,Single choice,"MongoDB là cơ sở dữ liệu NoSQL hướng document."
-"1 + 1 = ?",1,2,3,4,B,Single choice,"1 + 1 bằng 2."
+﻿Câu hỏi,A,B,C,D,E,F,Đáp án đúng,Loại câu,Giải thích
+"Tá dược nào thường được dùng làm tá dược rã trong viên nén?",Lactose,Crospovidon,Talc,Parafin,,,B,Single choice,Crospovidon là tá dược siêu rã thường dùng trong viên nén.
+"Các trường nào cần có trong file Excel để tạo quiz?",Câu hỏi,Đáp án A-D,Đáp án đúng,Ảnh đại diện,,,"A;B;C",Multiple choice,"File cần câu hỏi, các lựa chọn và đáp án đúng; ảnh đại diện không bắt buộc."
+"Câu hỏi có xuống dòng:
+Dòng 1: Nội dung dòng 1
+Dòng 2: Nội dung dòng 2
+Dòng 3: Nội dung dòng 3",Đáp án A,"Đáp án B
+có xuống dòng",Đáp án C,Đáp án D,,,B,Single choice,"Ví dụ câu hỏi và đáp án có xuống dòng.
+Xuống dòng sẽ được giữ nguyên."
+"Câu hỏi có 6 đáp án - Chọn 1 đáp án đúng?",Đáp án A,Đáp án B,Đáp án C,Đáp án D,Đáp án E,Đáp án F (đúng),F,Single choice,Ví dụ câu hỏi có 6 đáp án (A-F).
+"Câu hỏi có 5 đáp án - Chọn nhiều đáp án đúng?",Đáp án A (đúng),Đáp án B,Đáp án C (đúng),Đáp án D,Đáp án E (đúng),,"A;C;E",Multiple choice,Ví dụ câu hỏi có 5 đáp án và 3 đáp án đúng.
+2 + 2 = ?,3,4,5,6,,,B,Single choice,2 + 2 bằng 4.
+Thủ đô của Việt Nam là?,Hà Nội,TP.HCM,Đà Nẵng,Huế,,,A,Single choice,Hà Nội là thủ đô của Việt Nam.
+Màu của bầu trời vào ngày nắng thường là?,Xanh,Đỏ,Vàng,Tím,,,A,Single choice,Ánh sáng tán xạ khiến bầu trời thường có màu xanh.
+Python là gì?,Ngôn ngữ lập trình,Con rắn,Thương hiệu,Tất cả đều đúng,,,D,Single choice,"Python vừa là tên ngôn ngữ lập trình, vừa là tên một loài rắn và có thể là tên thương hiệu."
+React là?,Library JavaScript,Framework,Database,Server,,,A,Single choice,React là thư viện JavaScript để xây dựng giao diện người dùng.

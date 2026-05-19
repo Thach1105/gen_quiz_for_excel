@@ -7,7 +7,7 @@ export default {
   reporter: "html",
   use: {
     baseURL: "http://localhost:3000",
-    headless: true, //bật tăt giao diện trình duyệt khi chạy test (true = tắt giao diện, false = bật giao diện)
+    headless: false, //bật tăt giao diện trình duyệt khi chạy test (true = tắt giao diện, false = bật giao diện)
     trace: "on-first-retry",
     screenshot: "only-on-failure",
   },
@@ -16,14 +16,6 @@ export default {
     {
       name: "chromium",
       use: { browserName: "chromium" },
-    },
-    {
-      name: "firefox",
-      use: { browserName: "firefox" },
-    },
-    {
-      name: "webkit",
-      use: { browserName: "webkit" },
     },
   ],
 

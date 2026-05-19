@@ -120,11 +120,6 @@ const normalizeCorrectAnswer = (rawAnswer, optionMap) => {
   return [answerText];
 };
 
-/**
- * Parse Excel file buffer and extract quiz data.
- * @param {Buffer} fileBuffer - File buffer
- * @returns {Array} Parsed sheet rows
- */
 export const parseExcelFile = (fileBuffer) => {
   try {
     const workbook = XLSX.read(fileBuffer, { type: "buffer" });
@@ -143,11 +138,6 @@ export const parseExcelFile = (fileBuffer) => {
   }
 };
 
-/**
- * Detect column mapping from Excel data.
- * @param {Array} data - Raw Excel data
- * @returns {Object} Column mapping
- */
 export const detectColumnMapping = (data) => {
   if (!data || data.length === 0) {
     throw new Error("No data to detect columns");
@@ -158,10 +148,7 @@ export const detectColumnMapping = (data) => {
 
   const mapping = {
     question: null,
-    optionA: null,
-    optionB: null,
-    optionC: null,
-    optionD: null,
+    options: {},
     correctAnswer: null,
     type: null,
     explanation: null,
@@ -177,21 +164,22 @@ export const detectColumnMapping = (data) => {
   for (const col of columns) {
     const colLower = normalizeText(col);
 
-    if (!mapping.optionA && ["a", "option a", "lua chon a"].includes(colLower)) {
-      mapping.optionA = col;
-      continue;
+    const singleLetterMatch = colLower.match(/^([a-z])$/);
+    if (singleLetterMatch) {
+      const letter = singleLetterMatch[1].toUpperCase();
+      if (!mapping.options[letter]) {
+        mapping.options[letter] = col;
+        continue;
+      }
     }
-    if (!mapping.optionB && ["b", "option b", "lua chon b"].includes(colLower)) {
-      mapping.optionB = col;
-      continue;
-    }
-    if (!mapping.optionC && ["c", "option c", "lua chon c"].includes(colLower)) {
-      mapping.optionC = col;
-      continue;
-    }
-    if (!mapping.optionD && ["d", "option d", "lua chon d"].includes(colLower)) {
-      mapping.optionD = col;
-      continue;
+
+    const optionPatternMatch = colLower.match(/^(?:option|lua\s*chon)\s*([a-z])$/);
+    if (optionPatternMatch) {
+      const letter = optionPatternMatch[1].toUpperCase();
+      if (!mapping.options[letter]) {
+        mapping.options[letter] = col;
+        continue;
+      }
     }
 
     if (!mapping.question && columnMatches(col, patterns.question)) {
@@ -214,26 +202,28 @@ export const detectColumnMapping = (data) => {
   return mapping;
 };
 
-/**
- * Transform Excel data to quiz format.
- * @param {Array} data - Raw Excel data
- * @param {Object} mapping - Column mapping
- * @returns {Array} Quiz questions
- */
 export const transformToQuizFormat = (data, mapping) => {
   try {
     const questions = data.map((row, index) => {
-      const optionMap = {
-        A: readOption(row, mapping.optionA),
-        B: readOption(row, mapping.optionB),
-        C: readOption(row, mapping.optionC),
-        D: readOption(row, mapping.optionD),
-      };
+      const optionMap = {};
+      const optionLetters = Object.keys(mapping.options).sort();
+      
+      for (const letter of optionLetters) {
+        const columnName = mapping.options[letter];
+        const optionValue = readOption(row, columnName);
+        if (optionValue) {
+          optionMap[letter] = optionValue;
+        }
+      }
+      
       const options = Object.values(optionMap).filter(Boolean);
+
+      const questionText = String(readCell(row, mapping.question));
+      const cleanedQuestion = questionText.replace(/^\s+|\s+$/g, "");
 
       const question = {
         id: index + 1,
-        question: String(readCell(row, mapping.question)).trim(),
+        question: cleanedQuestion,
         options,
         answer: normalizeCorrectAnswer(readCell(row, mapping.correctAnswer), optionMap),
         type: normalizeQuestionType(readCell(row, mapping.type, "Single choice")),
@@ -255,11 +245,6 @@ export const transformToQuizFormat = (data, mapping) => {
   }
 };
 
-/**
- * Validate quiz data.
- * @param {Array} questions - Quiz questions
- * @returns {Object} Validation result
- */
 export const validateQuizData = (questions) => {
   const errors = [];
   const warnings = [];

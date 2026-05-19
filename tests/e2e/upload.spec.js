@@ -89,4 +89,83 @@ test.describe("Upload Functionality", () => {
     await expect.poll(() => createPayload?.title).toContain("duoc ly nang cao -");
     expect(createPayload.title).toMatch(/\d{2}\/\d{2}\/\d{4}/);
   });
+
+  test("should create quiz from an Excel question with more than four answers", async ({ page }) => {
+    const manyAnswerQuestion = {
+      id: 1,
+      question: "Question with six answer choices?",
+      options: ["Answer A", "Answer B", "Answer C", "Answer D", "Answer E", "Answer F"],
+      answer: ["Answer E"],
+      type: "Single choice",
+      explanation: "The fifth answer should be preserved.",
+    };
+    let createPayload;
+
+    await page.route("**/api/quiz/upload", async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          data: {
+            questions: [manyAnswerQuestion],
+            mapping: {
+              question: "Câu hỏi",
+              options: {
+                A: "A",
+                B: "B",
+                C: "C",
+                D: "D",
+                E: "E",
+                F: "F",
+              },
+              correctAnswer: "Đáp án đúng",
+              type: "Loại câu",
+              explanation: "Giải thích",
+            },
+            validation: {
+              valid: true,
+              errors: [],
+              warnings: [],
+              totalQuestions: 1,
+            },
+            fileName: "six-answers.xlsx",
+          },
+        }),
+      });
+    });
+
+    await page.route("**/api/quiz", async route => {
+      if (route.request().method() === "POST") {
+        createPayload = route.request().postDataJSON();
+        await route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify({
+            success: true,
+            data: { id: "created-quiz", ...createPayload },
+          }),
+        });
+        return;
+      }
+      await route.fallback();
+    });
+
+    await page.locator("input[type='file']").setInputFiles({
+      name: "six-answers.xlsx",
+      mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      buffer: Buffer.from("mock xlsx with six answers"),
+    });
+
+    await expect(page.getByText("Question with six answer choices?")).toBeVisible();
+    await page.getByText("Question with six answer choices?").click();
+    await expect(page.getByText("Answer E")).toBeVisible();
+    await expect(page.getByText("Answer F")).toBeVisible();
+
+    await page.getByRole("button", { name: /Tạo bài quiz/i }).click();
+
+    await expect.poll(() => createPayload?.questions?.[0]?.options?.length).toBe(6);
+    expect(createPayload.questions[0].options).toEqual(["Answer A", "Answer B", "Answer C", "Answer D", "Answer E", "Answer F"]);
+    expect(createPayload.questions[0].answer).toEqual(["Answer E"]);
+  });
 });
