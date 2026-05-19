@@ -334,7 +334,7 @@ export default function QuizResult() {
                               </span>
                             )}
                           </span>
-                          <span className="block truncate font-medium text-gray-900 md:whitespace-normal">
+                          <span className="block truncate whitespace-pre-line font-medium text-gray-900 md:whitespace-pre-line">
                             {question.question}
                           </span>
                         </span>
@@ -349,7 +349,7 @@ export default function QuizResult() {
 
                       {expandedQuestions.has(question.id) && (
                         <div className="mt-4 border-t border-white/70 pt-4" data-testid={`result-question-detail-${question.id}`}>
-                          <div className="mb-3 rounded-xl bg-white/80 p-3 text-sm text-gray-800">
+                          <div className="mb-3 whitespace-pre-line rounded-xl bg-white/80 p-3 text-sm text-gray-800">
                             {question.question}
                           </div>
                           <div className="space-y-2 text-sm">
@@ -366,7 +366,7 @@ export default function QuizResult() {
                             {question.explanation && (
                               <div className="rounded-xl border border-gray-200 bg-white/70 p-3">
                                 <span className="font-bold text-gray-700">Giải thích: </span>
-                                <span className="text-gray-700">{question.explanation}</span>
+                                <span className="whitespace-pre-line text-gray-700">{question.explanation}</span>
                               </div>
                             )}
                           </div>

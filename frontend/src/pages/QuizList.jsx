@@ -558,7 +558,7 @@ export default function QuizList() {
                           </div>
                           <div className="space-y-2">
                             {(quiz.questions || []).slice(0, 3).map((question, questionIndex) => (
-                              <div key={question.id || questionIndex} className="rounded-xl bg-white p-3 text-sm text-gray-700">
+                              <div key={question.id || questionIndex} className="whitespace-pre-line rounded-xl bg-white p-3 text-sm text-gray-700">
                                 <span className="font-black text-blue-700">Câu {questionIndex + 1}: </span>
                                 {question.question}
                               </div>

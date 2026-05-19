@@ -483,7 +483,7 @@ export default function QuizTake() {
                     )}
                   </div>
                   <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                    <h2 className="text-2xl font-bold text-gray-900">{question.question}</h2>
+                    <h2 className="whitespace-pre-line text-2xl font-bold text-gray-900">{question.question}</h2>
                     <Button
                       type="button"
                       onClick={() => handleToggleFlag(question.id)}
@@ -519,7 +519,7 @@ export default function QuizTake() {
                         )}`}
                       >
                         <div className="flex items-center justify-between gap-3">
-                          <span className="font-medium">{option}</span>
+                          <span className="whitespace-pre-line font-medium">{option}</span>
                           {isMultiple ? (
                             isSelected ? (
                               <CheckSquare className="h-5 w-5 flex-shrink-0 text-blue-600" />
@@ -568,11 +568,11 @@ export default function QuizTake() {
                       </span>
                     </div>
                     <p className="text-sm text-gray-700">
-                      Đáp án đúng: <span className="font-bold text-emerald-700">{formatCorrectAnswer(question)}</span>
+                      Đáp án đúng: <span className="whitespace-pre-line font-bold text-emerald-700">{formatCorrectAnswer(question)}</span>
                     </p>
                     {question.explanation && (
                       <p className="mt-2 text-sm text-gray-700">
-                        Giải thích: <span className="font-medium">{question.explanation}</span>
+                        Giải thích: <span className="whitespace-pre-line font-medium">{question.explanation}</span>
                       </p>
                     )}
                   </div>
