@@ -1,5 +1,13 @@
-﻿export const errorHandler = (err, req, res, next) => {
-  console.error("Error:", err);
+﻿import logger from "../services/logger.service.js";
+
+export const errorHandler = (err, req, res, next) => {
+  logger.error("Request error", { 
+    error: err.message, 
+    stack: err.stack,
+    code: err.code,
+    name: err.name,
+    statusCode: err.statusCode
+  });
 
   // Multer file upload errors
   if (err.code === "LIMIT_FILE_SIZE") {

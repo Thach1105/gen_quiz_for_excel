@@ -1,9 +1,11 @@
-import express from "express";
+﻿import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import dotenv from "dotenv";
 import rateLimit from "express-rate-limit";
 import quizRoutes from "./routes/quiz.routes.js";
+import logger from "./services/logger.service.js";
+import { requestLogger } from "./middleware/logger.middleware.js";
 import { errorHandler } from "./middleware/error.middleware.js";
 import { connectDB } from "./services/mongodb.service.js";
 
@@ -57,6 +59,9 @@ const limiter = rateLimit({
 });
 app.use("/api/", limiter);
 
+// Request logging middleware
+app.use(requestLogger);
+
 // Body parser
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
@@ -82,15 +87,15 @@ const startServer = async () => {
   try {
     // Connect to MongoDB
     await connectDB();
-    console.log("MongoDB connected successfully");
+    logger.info("MongoDB connected successfully");
 
     // Start server
     app.listen(PORT, () => {
-      console.log(`Server is running on port ${PORT}`);
-      console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
+      logger.info(`Server is running on port ${PORT}`);
+      logger.info(`Environment: ${process.env.NODE_ENV || "development"}`);
     });
   } catch (error) {
-    console.error("Failed to start server:", error);
+    logger.error("Failed to start server", { error: error.message, stack: error.stack });
     process.exit(1);
   }
 };

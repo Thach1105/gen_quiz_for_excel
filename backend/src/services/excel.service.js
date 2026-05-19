@@ -1,4 +1,5 @@
-import XLSX from "xlsx";
+﻿import XLSX from "xlsx";
+import logger from "./logger.service.js";
 
 const repairMojibake = (value) => {
   try {
@@ -137,7 +138,7 @@ export const parseExcelFile = (fileBuffer) => {
 
     return data;
   } catch (error) {
-    console.error("Error parsing Excel file:", error);
+    logger.error("Error parsing Excel file", { error: error.message, stack: error.stack });
     throw new Error(`Failed to parse Excel file: ${error.message}`);
   }
 };
@@ -240,7 +241,7 @@ export const transformToQuizFormat = (data, mapping) => {
       };
 
       if (!question.question || question.options.length < 2) {
-        console.warn(`Skipping invalid question at row ${index + 1}`);
+        logger.warn(`Skipping invalid question at row ${index + 1}`);
         return null;
       }
 
@@ -249,7 +250,7 @@ export const transformToQuizFormat = (data, mapping) => {
 
     return questions.filter(q => q !== null);
   } catch (error) {
-    console.error("Error transforming data:", error);
+    logger.error("Error transforming data", { error: error.message, stack: error.stack });
     throw new Error(`Failed to transform data: ${error.message}`);
   }
 };

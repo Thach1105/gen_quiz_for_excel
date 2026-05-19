@@ -1,13 +1,39 @@
-import { ObjectId } from "mongodb";
+﻿import { ObjectId } from "mongodb";
 import { parseExcelFile, detectColumnMapping, transformToQuizFormat, validateQuizData } from "../services/excel.service.js";
 import { getDB } from "../services/mongodb.service.js";
 import { uploadFile } from "../services/cloudinary.service.js";
+import logger from "../services/logger.service.js";
+
+const normalizeTitlePart = (value) =>
+  String(value || "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const getQuestionKeyword = (questions) => {
+  const firstQuestion = normalizeTitlePart(questions?.[0]?.question);
+  return firstQuestion.split(" ").filter(Boolean).slice(0, 8).join(" ");
+};
+
+const padDatePart = (value) => String(value).padStart(2, "0");
+
+const formatTitleTime = (date = new Date()) =>
+  `${padDatePart(date.getDate())}/${padDatePart(date.getMonth() + 1)}/${date.getFullYear()} ${padDatePart(date.getHours())}:${padDatePart(date.getMinutes())}`;
+
+const generateQuizTitle = (questions) => {
+  const keyword = getQuestionKeyword(questions) || "Quiz";
+  return `${keyword} - ${formatTitleTime()}`;
+};
 
 /**
  * Upload and parse Excel file
  */
 export const uploadExcelFile = async (req, res, next) => {
   try {
+    logger.info("Processing Excel file upload", { 
+      fileName: req.file?.originalname,
+      fileSize: req.file?.size,
+      requestId: req.requestId 
+    });
     if (!req.file) {
       return res.status(400).json({ error: "No file uploaded" });
     }
@@ -31,6 +57,12 @@ export const uploadExcelFile = async (req, res, next) => {
       });
     }
 
+    logger.info("Excel file processed successfully", {
+      fileName: req.file.originalname,
+      questionCount: questions.length,
+      requestId: req.requestId
+    });
+    
     res.status(200).json({
       success: true,
       data: {
@@ -51,6 +83,12 @@ export const uploadExcelFile = async (req, res, next) => {
 export const createQuiz = async (req, res, next) => {
   try {
     const { title, description, questions, settings } = req.body;
+    
+    logger.info("Creating new quiz", { 
+      title: title || "Auto-generated",
+      questionCount: questions?.length || 0,
+      requestId: req.requestId 
+    });
 
     if (!questions || questions.length === 0) {
       return res.status(400).json({ error: "No questions provided" });
@@ -66,8 +104,9 @@ export const createQuiz = async (req, res, next) => {
     }
 
     // Create quiz document
+    const normalizedTitle = normalizeTitlePart(title);
     const quizData = {
-      title: title || "Untitled Quiz",
+      title: normalizedTitle || generateQuizTitle(questions),
       description: description || "",
       questions,
       settings: {
@@ -81,6 +120,13 @@ export const createQuiz = async (req, res, next) => {
     // Save to MongoDB
     const db = getDB();
     const result = await db.collection("quizzes").insertOne(quizData);
+    
+    logger.info("Quiz created successfully", {
+      quizId: result.insertedId.toString(),
+      title: quizData.title,
+      questionCount: questions.length,
+      requestId: req.requestId
+    });
 
     res.status(201).json({
       success: true,
@@ -100,6 +146,8 @@ export const createQuiz = async (req, res, next) => {
 export const getQuizById = async (req, res, next) => {
   try {
     const { id } = req.params;
+    
+    logger.info("Fetching quiz by ID", { quizId: id, requestId: req.requestId });
 
     if (!ObjectId.isValid(id)) {
       return res.status(400).json({ error: "Invalid quiz ID" });
@@ -107,10 +155,17 @@ export const getQuizById = async (req, res, next) => {
 
     const db = getDB();
     const quiz = await db.collection("quizzes").findOne({ _id: new ObjectId(id) });
-
+    
     if (!quiz) {
+      logger.warn("Quiz not found", { quizId: id, requestId: req.requestId });
       return res.status(404).json({ error: "Quiz not found" });
     }
+    
+    logger.info("Quiz fetched successfully", { 
+      quizId: id, 
+      title: quiz.title,
+      requestId: req.requestId 
+    });
 
     res.status(200).json({
       success: true,
@@ -130,6 +185,12 @@ export const getQuizById = async (req, res, next) => {
 export const getAllQuizzes = async (req, res, next) => {
   try {
     const { limit = 10, offset = 0 } = req.query;
+    
+    logger.info("Fetching all quizzes", { 
+      limit: parseInt(limit), 
+      offset: parseInt(offset),
+      requestId: req.requestId 
+    });
 
     const db = getDB();
     const quizzes = await db
@@ -141,6 +202,12 @@ export const getAllQuizzes = async (req, res, next) => {
       .toArray();
 
     const total = await db.collection("quizzes").countDocuments();
+    
+    logger.info("Quizzes fetched successfully", { 
+      count: quizzes.length, 
+      total,
+      requestId: req.requestId 
+    });
 
     res.status(200).json({
       success: true,
@@ -166,6 +233,12 @@ export const updateQuiz = async (req, res, next) => {
   try {
     const { id } = req.params;
     const updates = req.body;
+    
+    logger.info("Updating quiz", { 
+      quizId: id, 
+      updates: Object.keys(updates),
+      requestId: req.requestId 
+    });
 
     if (!ObjectId.isValid(id)) {
       return res.status(400).json({ error: "Invalid quiz ID" });
@@ -180,13 +253,28 @@ export const updateQuiz = async (req, res, next) => {
     }
 
     // Update quiz
+    const safeUpdates = { ...updates };
+    if (Object.prototype.hasOwnProperty.call(safeUpdates, "title")) {
+      const normalizedTitle = normalizeTitlePart(safeUpdates.title);
+      if (!normalizedTitle) {
+        return res.status(400).json({ error: "Quiz title cannot be empty" });
+      }
+      safeUpdates.title = normalizedTitle;
+    }
+
     await db.collection("quizzes").updateOne(
       { _id: new ObjectId(id) },
-      { $set: { ...updates, updatedAt: new Date() } }
+      { $set: { ...safeUpdates, updatedAt: new Date() } }
     );
 
     // Get updated quiz
     const updatedQuiz = await db.collection("quizzes").findOne({ _id: new ObjectId(id) });
+    
+    logger.info("Quiz updated successfully", { 
+      quizId: id,
+      title: updatedQuiz.title,
+      requestId: req.requestId 
+    });
 
     res.status(200).json({
       success: true,
@@ -206,6 +294,8 @@ export const updateQuiz = async (req, res, next) => {
 export const deleteQuiz = async (req, res, next) => {
   try {
     const { id } = req.params;
+    
+    logger.info("Deleting quiz", { quizId: id, requestId: req.requestId });
 
     if (!ObjectId.isValid(id)) {
       return res.status(400).json({ error: "Invalid quiz ID" });
@@ -221,6 +311,12 @@ export const deleteQuiz = async (req, res, next) => {
 
     // Delete quiz
     await db.collection("quizzes").deleteOne({ _id: new ObjectId(id) });
+    
+    logger.info("Quiz deleted successfully", { 
+      quizId: id,
+      title: quiz.title,
+      requestId: req.requestId 
+    });
 
     res.status(200).json({
       success: true,

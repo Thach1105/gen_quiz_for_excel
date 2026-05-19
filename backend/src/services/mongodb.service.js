@@ -1,5 +1,6 @@
-import { MongoClient } from "mongodb";
+﻿import { MongoClient } from "mongodb";
 import dotenv from "dotenv";
+import logger from "./logger.service.js";
 
 dotenv.config();
 
@@ -12,7 +13,7 @@ let client = null;
 export const connectDB = async () => {
   try {
     if (db) {
-      console.log("MongoDB already connected");
+      logger.info("MongoDB already connected");
       return db;
     }
 
@@ -25,11 +26,11 @@ export const connectDB = async () => {
     await client.connect();
     
     db = client.db(process.env.MONGODB_DB || "excel-to-quiz");
-    console.log("MongoDB connected successfully");
+    logger.info("MongoDB connected successfully", { database: process.env.MONGODB_DB || "excel-to-quiz" });
     
     return db;
   } catch (error) {
-    console.error("MongoDB connection error:", error);
+    logger.error("MongoDB connection error", { error: error.message, stack: error.stack });
     throw error;
   }
 };
@@ -52,7 +53,7 @@ export const closeDB = async () => {
     await client.close();
     db = null;
     client = null;
-    console.log("MongoDB connection closed");
+    logger.info("MongoDB connection closed");
   }
 };
 
