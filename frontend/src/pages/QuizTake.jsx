@@ -390,14 +390,18 @@ export default function QuizTake() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-      <aside className="fixed left-3 top-24 z-30 hidden max-h-[calc(100vh-7rem)] w-20 overflow-y-auto rounded-3xl border border-gray-200 bg-white/95 p-2 shadow-xl backdrop-blur lg:block">
-        <div className="mb-2 h-2 overflow-hidden rounded-full bg-gray-100">
+      <aside className="fixed left-4 top-24 z-30 hidden max-h-[calc(100vh-7rem)] w-64 overflow-y-auto rounded-3xl border border-gray-200 bg-white/95 p-3 shadow-xl backdrop-blur lg:block">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <span className="text-xs font-black uppercase text-gray-600">Câu hỏi</span>
+          <span className="text-xs font-bold text-blue-700">{answeredCount}/{quiz.questions.length}</span>
+        </div>
+        <div className="mb-3 h-2 overflow-hidden rounded-full bg-gray-100">
           <div
             className="h-full rounded-full bg-blue-600 transition-all"
             style={{ width: `${progressPercent}%` }}
           />
         </div>
-        <div className="grid grid-cols-1 gap-2">
+        <div className="grid grid-cols-5 gap-2">
           {quiz.questions.map((item, idx) => {
             const status = getQuestionStatus(item.id, idx);
             return (
@@ -418,7 +422,7 @@ export default function QuizTake() {
         </div>
       </aside>
 
-      <div className="relative z-10 mx-auto max-w-[1500px] px-4 py-6 sm:px-6 lg:pl-28 lg:pr-8">
+      <div className="relative z-10 mx-auto max-w-[1500px] px-4 py-6 sm:px-6 lg:pl-80 lg:pr-8">
         <div className="sticky top-0 z-20 mb-6 rounded-[2rem] border border-gray-200 bg-white/90 p-4 shadow-lg backdrop-blur">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex flex-wrap items-center gap-3">
