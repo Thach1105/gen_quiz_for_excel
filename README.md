@@ -1,42 +1,60 @@
-﻿# Excel to Quiz - QuizForge
+# gen_quiz_for_excel
 
-Ứng dụng web chuyển đổi file Excel thành bài kiểm tra trắc nghiệm tương tác.
+Ứng dụng web chuyển file Excel/CSV thành bài quiz trắc nghiệm. Dự án gồm frontend React/Vite, backend Express/MongoDB và bộ test E2E Playwright.
 
-## Công nghệ sử dụng
+## Chức năng chính
+
+- Upload file `.xlsx`, `.xls`, `.csv` để parse câu hỏi.
+- Tự nhận diện cột câu hỏi, đáp án A-D, đáp án đúng, loại câu và giải thích.
+- Hỗ trợ `Single choice` và `Multiple choice`.
+- Cột `Đáp án đúng` nên dùng mã đáp án như `A`, `B`, `A;C`; backend map sang nội dung đáp án thật và lưu dạng array.
+- Tạo quiz, lưu MongoDB, chia sẻ link làm bài.
+- Khi làm quiz mới chọn mode:
+  - `Exam`: chỉ hiện kết quả/đáp án đúng sau khi nộp.
+  - `Practice`: có thể xem đáp án đúng và giải thích từng câu.
+- Có bảng điều hướng câu hỏi, đánh dấu câu cần xem lại, timer và tự nộp khi hết giờ.
+- Trang kết quả có thống kê, lọc câu đúng/sai/chưa trả lời/đã đánh dấu.
+
+## Tech stack
 
 ### Frontend
-- React.js 18
+
+- React 18
 - Vite
 - TailwindCSS
 - Framer Motion
-- Lucide React Icons
-- Firebase (Authentication, Firestore, Storage)
+- Lucide React
+- Playwright E2E
 
 ### Backend
+
 - Node.js
 - Express.js
-- Firebase Admin SDK
-- XLSX (xử lý file Excel)
+- MongoDB native driver
+- Multer
+- XLSX
+- Helmet, CORS, rate limit
 
-### Testing
-- Playwright (E2E testing)
+## Cài đặt local
 
-## Cấu trúc dự án
+### Backend
 
+```bash
+cd backend
+npm install
+cp .env.example .env
+npm run dev
 ```
-excel-to-quiz/
-├── frontend/          # React application
-├── backend/           # Node.js API
-├── tests/             # Playwright E2E tests
-└── README.md
+
+Biến môi trường backend:
+
+```env
+PORT=5000
+NODE_ENV=development
+MONGODB_URI=mongodb+srv://...
+MONGODB_DB=excel-to-quiz
+CORS_ORIGIN=http://localhost:3000
 ```
-
-## Cài đặt
-
-### Yêu cầu
-- Node.js >= 18.x
-- npm hoặc yarn
-- Firebase project
 
 ### Frontend
 
@@ -44,95 +62,42 @@ excel-to-quiz/
 cd frontend
 npm install
 cp .env.example .env
-# Cập nhật thông tin Firebase trong .env
 npm run dev
 ```
 
-### Backend
+Biến môi trường frontend:
 
-```bash
-cd backend
-npm install
-cp .env.example .env
-# Cập nhật thông tin Firebase Admin SDK trong .env
-npm run dev
+```env
+VITE_API_URL=http://localhost:5000
 ```
 
-## Cấu hình Firebase
-
-### Bước 1: Tạo Firebase Project
-1. Truy cập [Firebase Console](https://console.firebase.google.com/)
-2. Tạo project mới
-3. Kích hoạt Authentication (Email/Password)
-4. Tạo Firestore Database
-5. Tạo Storage bucket
-
-### Bước 2: Lấy thông tin cấu hình
-
-#### Frontend (Web App)
-1. Project Settings > General > Your apps
-2. Chọn Web app và copy config
-3. Paste vào `frontend/.env`
-
-#### Backend (Admin SDK)
-1. Project Settings > Service accounts
-2. Generate new private key
-3. Lưu file JSON và cập nhật thông tin vào `backend/.env`
-
-## Chạy ứng dụng
-
-### Development
+## Build và test
 
 ```bash
-# Terminal 1 - Backend
-cd backend
-npm run dev
-
-# Terminal 2 - Frontend
-cd frontend
-npm run dev
-```
-
-### Production Build
-
-```bash
-# Frontend
 cd frontend
 npm run build
-
-# Backend
-cd backend
-npm start
-```
-
-## Testing
-
-### E2E Tests với Playwright
-
-```bash
-cd frontend
 npm run test:e2e
 ```
 
-## Tính năng
+## Deploy
 
-- ✅ Upload file Excel (.xlsx, .xls, .csv)
-- ✅ Tự động nhận diện cột câu hỏi, đáp án
-- ✅ Preview câu hỏi trước khi tạo quiz
-- ✅ Tùy chỉnh thời gian, điểm số
-- ✅ Trộn câu hỏi ngẫu nhiên
-- ✅ Export quiz ra nhiều định dạng
-- ✅ Chia sẻ link quiz online
-- ✅ Lưu trữ trên Firebase
+Xem hướng dẫn chi tiết trong [DEPLOYMENT.md](DEPLOYMENT.md).
 
-## Cấu trúc file Excel
+Tóm tắt:
 
-File Excel cần có các cột:
-- **Câu hỏi**: Nội dung câu hỏi
-- **A, B, C, D**: Các đáp án
-- **Đáp án đúng**: Đáp án đúng (A, B, C, D hoặc nhiều đáp án)
-- **Loại câu**: Single choice / Multiple choice (optional)
+- Render backend: root directory `backend`, start command `npm start`.
+- Vercel frontend: root directory `frontend`, build command `npm run build`, output `dist`.
+- Vercel cần `VITE_API_URL=https://your-backend.onrender.com`.
+- Render cần `CORS_ORIGIN=https://your-frontend.vercel.app,https://*.vercel.app`.
 
-## License
+## Cấu trúc file template
 
-MIT
+```text
+Câu hỏi | A | B | C | D | Đáp án đúng | Loại câu | Giải thích
+```
+
+Ví dụ:
+
+```text
+Câu nhiều đáp án? | Đáp án A | Đáp án B | Đáp án C | Đáp án D | A;C | Multiple choice | Giải thích tùy chọn
+```
