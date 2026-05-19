@@ -188,10 +188,10 @@ test.describe("Quiz List", () => {
     await page.goto("/quizzes");
 
     await expect(page.getByText("Cây phân loại")).toBeVisible();
-    await expect(page.getByRole("button", { name: /Dược lý 0 quiz/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Viên nén 1 quiz/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Dược lý 1 nhóm con 0/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Viên nén 0 nhóm con 1/i })).toBeVisible();
 
-    await page.getByRole("button", { name: /Dược lý 0 quiz/i }).click();
+    await page.getByRole("button", { name: /Dược lý 1 nhóm con 0/i }).click();
     await expect(page.getByRole("heading", { name: "Quiz comma nâng cao" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Quiz cơ bản" })).toHaveCount(0);
 
@@ -208,6 +208,6 @@ test.describe("Quiz List", () => {
     await page.getByTestId("new-category-parent").selectOption("cat-tablet");
     await page.getByTestId("create-category-button").click();
 
-    await expect(page.getByRole("button", { name: /Tá dược 0 quiz/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Tá dược 0 nhóm con 0/i })).toBeVisible();
   });
 });
