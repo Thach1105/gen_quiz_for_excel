@@ -61,6 +61,110 @@ const resolveCategoryId = async (db, categoryId) => {
   return objectId;
 };
 
+const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const normalizeSearchText = (value) =>
+  String(value || "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+
+const getSearchTokens = (value) => normalizeSearchText(value)
+  .split(/\s+/)
+  .map(token => token.trim())
+  .filter(Boolean);
+
+const buildSearchFilter = (tokens) => {
+  if (tokens.length === 0) return null;
+
+  return {
+    $and: tokens.map(token => {
+      const pattern = escapeRegex(token);
+      return {
+        $or: [
+          { normalizedTitle: { $regex: pattern } },
+          { normalizedDescription: { $regex: pattern } },
+          { normalizedCategoryPath: { $regex: pattern } },
+        ],
+      };
+    }),
+  };
+};
+
+const getDescendantCategoryObjectIds = async (db, categoryId) => {
+  if (!ObjectId.isValid(categoryId)) {
+    const error = new Error("Invalid category ID");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const categories = await db.collection("quizCategories").find({}).toArray();
+  const rootId = new ObjectId(categoryId);
+  const exists = categories.some(category => category._id.equals(rootId));
+  if (!exists) {
+    const error = new Error("Category not found");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const childrenByParent = new Map();
+  categories.forEach(category => {
+    const parentId = category.parentId?.toString?.();
+    if (!parentId) return;
+    childrenByParent.set(parentId, [...(childrenByParent.get(parentId) || []), category]);
+  });
+
+  const result = [rootId];
+  const queue = [rootId.toString()];
+  while (queue.length > 0) {
+    const parentId = queue.shift();
+    const children = childrenByParent.get(parentId) || [];
+    children.forEach(child => {
+      result.push(child._id);
+      queue.push(child._id.toString());
+    });
+  }
+
+  return result;
+};
+
+const buildCategoryPathMap = (categories) => {
+  const categoryMap = new Map(categories.map(category => [category._id.toString(), category]));
+  const pathMap = new Map();
+
+  const getPath = (category) => {
+    const categoryId = category._id.toString();
+    if (pathMap.has(categoryId)) return pathMap.get(categoryId);
+
+    const path = [category.name];
+    let parent = category.parentId ? categoryMap.get(category.parentId.toString()) : null;
+    const seen = new Set([categoryId]);
+    while (parent && !seen.has(parent._id.toString())) {
+      seen.add(parent._id.toString());
+      path.unshift(parent.name);
+      parent = parent.parentId ? categoryMap.get(parent.parentId.toString()) : null;
+    }
+
+    const value = path.join(" ");
+    pathMap.set(categoryId, value);
+    return value;
+  };
+
+  categories.forEach(category => getPath(category));
+  return pathMap;
+};
+
+const enrichQuizSearchFields = (quiz, categoryPathMap) => ({
+  ...quiz,
+  normalizedTitle: normalizeSearchText(quiz.title),
+  normalizedDescription: normalizeSearchText(quiz.description),
+  normalizedCategoryPath: normalizeSearchText(categoryPathMap.get(quiz.categoryId?.toString?.()) || ""),
+});
+
 /**
  * Upload and parse Excel file
  */
@@ -227,37 +331,65 @@ export const getQuizById = async (req, res, next) => {
  */
 export const getAllQuizzes = async (req, res, next) => {
   try {
-    const { limit = 10, offset = 0 } = req.query;
-    
-    logger.info("Fetching all quizzes", { 
-      limit: parseInt(limit), 
-      offset: parseInt(offset),
-      requestId: req.requestId 
+    const limit = Math.max(Number.parseInt(req.query.limit, 10) || 10, 1);
+    const offset = Math.max(Number.parseInt(req.query.offset, 10) || 0, 0);
+    const search = String(req.query.search || "").trim();
+    const categoryId = String(req.query.categoryId || "all");
+    const sortBy = String(req.query.sortBy || "latest");
+    const searchTokens = getSearchTokens(search);
+
+    logger.info("Fetching all quizzes", {
+      limit,
+      offset,
+      search,
+      categoryId,
+      sortBy,
+      requestId: req.requestId,
     });
 
     const db = getDB();
-    const quizzes = await db
-      .collection("quizzes")
-      .find({})
-      .sort({ createdAt: -1 })
-      .skip(parseInt(offset))
-      .limit(parseInt(limit))
-      .toArray();
+    const match = {};
 
-    const total = await db.collection("quizzes").countDocuments();
-    
-    logger.info("Quizzes fetched successfully", { 
-      count: quizzes.length, 
+    if (categoryId === "uncategorized") {
+      match.$or = [{ categoryId: null }, { categoryId: { $exists: false } }];
+    } else if (categoryId !== "all") {
+      match.categoryId = { $in: await getDescendantCategoryObjectIds(db, categoryId) };
+    }
+
+    const categories = await db.collection("quizCategories").find({}).toArray();
+    const categoryPathMap = buildCategoryPathMap(categories);
+    const rawQuizzes = await db.collection("quizzes").find(match).toArray();
+    const searchFilter = buildSearchFilter(searchTokens);
+    const searchableQuizzes = rawQuizzes.map(quiz => enrichQuizSearchFields(quiz, categoryPathMap));
+    const matchedQuizzes = searchFilter
+      ? searchableQuizzes.filter(quiz => searchFilter.$and.every(condition => condition.$or.some(fieldFilter => {
+        const [fieldName, matcher] = Object.entries(fieldFilter)[0];
+        return matcher.$regex.test ? matcher.$regex.test(quiz[fieldName] || "") : new RegExp(matcher.$regex).test(quiz[fieldName] || "");
+      })))
+      : searchableQuizzes;
+
+    const sortedQuizzes = [...matchedQuizzes].sort((a, b) => {
+      if (sortBy === "title") return String(a.title || "").localeCompare(String(b.title || ""), "vi");
+      if (sortBy === "questions") return (b.questions?.length || 0) - (a.questions?.length || 0);
+      if (sortBy === "time") return (b.settings?.timeLimit || 0) - (a.settings?.timeLimit || 0);
+      return new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime();
+    });
+
+    const total = sortedQuizzes.length;
+    const quizzes = sortedQuizzes.slice(offset, offset + limit);
+
+    logger.info("Quizzes fetched successfully", {
+      count: quizzes.length,
       total,
-      requestId: req.requestId 
+      requestId: req.requestId,
     });
 
     res.status(200).json({
       success: true,
       data: quizzes.map(serializeQuiz),
       pagination: {
-        limit: parseInt(limit),
-        offset: parseInt(offset),
+        limit,
+        offset,
         total,
       },
     });
@@ -267,7 +399,7 @@ export const getAllQuizzes = async (req, res, next) => {
     }
     next(error);
   }
-};
+};;
 
 /**
  * Update quiz

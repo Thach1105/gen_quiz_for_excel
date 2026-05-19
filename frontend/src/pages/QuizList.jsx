@@ -4,10 +4,13 @@ import { motion } from "framer-motion";
 import {
   CalendarDays,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   Clock,
   Copy,
   Edit3,
   FileQuestion,
+  Folder,
   FolderTree,
   LayoutGrid,
   ListChecks,
@@ -17,7 +20,6 @@ import {
   Search,
   Share2,
   Shuffle,
-  Sparkles,
   Trash2,
   X,
 } from "lucide-react";
@@ -89,7 +91,9 @@ export default function QuizList() {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [submittedSearch, setSubmittedSearch] = useState("");
+  const [pagination, setPagination] = useState({ limit: 100, offset: 0, total: 0 });
   const [sortBy, setSortBy] = useState("latest");
   const [viewMode, setViewMode] = useState("grid");
   const [copiedId, setCopiedId] = useState(null);
@@ -103,6 +107,7 @@ export default function QuizList() {
   const [savingTimeId, setSavingTimeId] = useState(null);
   const [timeEditError, setTimeEditError] = useState(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState("all");
+  const [showCategoryForm, setShowCategoryForm] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newCategoryParentId, setNewCategoryParentId] = useState("");
   const [categoryError, setCategoryError] = useState(null);
@@ -110,16 +115,23 @@ export default function QuizList() {
   const [editingCategoryName, setEditingCategoryName] = useState("");
   const [editingCategoryParentId, setEditingCategoryParentId] = useState("");
   const [savingQuizCategoryId, setSavingQuizCategoryId] = useState(null);
+  const [openCategoryIds, setOpenCategoryIds] = useState(() => new Set());
 
   useEffect(() => {
-    fetchQuizzes();
+    fetchQuizzes({ search: "", categoryId: "all", sortBy: "latest" });
   }, []);
 
-  const fetchQuizzes = async () => {
+  const fetchQuizzes = async ({ search = submittedSearch, categoryId = selectedCategoryId, sort = sortBy } = {}) => {
     try {
       setLoading(true);
-      const [quizResponse, categoryResponse] = await Promise.all([getAllQuizzes(100, 0), getAllCategories()]);
-      if (quizResponse.success) setQuizzes(quizResponse.data);
+      const [quizResponse, categoryResponse] = await Promise.all([
+        getAllQuizzes({ limit: 100, offset: 0, search, categoryId, sortBy: sort }),
+        getAllCategories(),
+      ]);
+      if (quizResponse.success) {
+        setQuizzes(quizResponse.data);
+        setPagination(quizResponse.pagination || { limit: 100, offset: 0, total: quizResponse.data.length });
+      }
       if (categoryResponse.success) setCategories(categoryResponse.data);
     } catch (err) {
       setError(err.message);
@@ -151,31 +163,60 @@ export default function QuizList() {
     return grouped;
   }, [quizzes]);
 
-  const filteredQuizzes = useMemo(() => {
-    const normalizedSearch = searchTerm.trim().toLowerCase();
-    const descendantIds = selectedCategoryId !== "all" && selectedCategoryId !== "uncategorized"
-      ? new Set(getDescendantIds(selectedCategoryId))
-      : null;
 
-    const matched = quizzes.filter((quiz) => {
-      const quizCategoryId = quiz.categoryId || null;
-      const matchesCategory = selectedCategoryId === "all"
-        || (selectedCategoryId === "uncategorized" ? !quizCategoryId : descendantIds.has(quizCategoryId));
-      if (!matchesCategory) return false;
-      if (!normalizedSearch) return true;
-      const text = [quiz.title, quiz.description, getCategoryPath(quiz.categoryId), ...(quiz.questions || []).map(question => question.question)]
-        .join(" ")
-        .toLowerCase();
-      return text.includes(normalizedSearch);
+  const toggleCategoryOpen = (categoryId) => {
+    setOpenCategoryIds(prev => {
+      const next = new Set(prev);
+      if (next.has(categoryId)) {
+        next.delete(categoryId);
+      } else {
+        next.add(categoryId);
+      }
+      return next;
     });
+  };
 
-    return [...matched].sort((a, b) => {
-      if (sortBy === "title") return String(a.title || "").localeCompare(String(b.title || ""), "vi");
-      if (sortBy === "questions") return getQuizMetrics(b).questionCount - getQuizMetrics(a).questionCount;
-      if (sortBy === "time") return getQuizMetrics(b).timeLimit - getQuizMetrics(a).timeLimit;
-      return new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime();
-    });
-  }, [getCategoryPath, getDescendantIds, quizzes, searchTerm, selectedCategoryId, sortBy]);
+  const getSelectedCategoryLabel = () => {
+    if (selectedCategoryId === "all") return "Tất cả quiz";
+    if (selectedCategoryId === "uncategorized") return "Chưa phân loại";
+    return getCategoryPath(selectedCategoryId) || "Nhóm đã chọn";
+  };
+
+  const applyCategory = (categoryId) => {
+    setSelectedCategoryId(categoryId);
+    fetchQuizzes({ categoryId, search: submittedSearch, sort: sortBy });
+  };
+
+  const handleSearchSubmit = () => {
+    const nextSearch = searchInput.trim();
+    setSubmittedSearch(nextSearch);
+    fetchQuizzes({ search: nextSearch, categoryId: selectedCategoryId, sort: sortBy });
+  };
+
+  const handleSearchKeyDown = (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      handleSearchSubmit();
+    }
+  };
+
+  const clearSearch = () => {
+    setSearchInput("");
+    setSubmittedSearch("");
+    fetchQuizzes({ search: "", categoryId: selectedCategoryId, sort: sortBy });
+  };
+
+  const handleSortChange = (nextSort) => {
+    setSortBy(nextSort);
+    fetchQuizzes({ search: submittedSearch, categoryId: selectedCategoryId, sort: nextSort });
+  };
+
+  const selectCategory = (categoryId) => {
+    applyCategory(categoryId);
+    if (categoryId !== "all" && categoryId !== "uncategorized") {
+      setOpenCategoryIds(prev => new Set(prev).add(categoryId));
+    }
+  };
 
   const handleDelete = async (id) => {
     if (!confirm("Đồng ý xóa quiz này?")) return;
@@ -291,8 +332,12 @@ export default function QuizList() {
       const response = await createCategory({ name, parentId: newCategoryParentId || null });
       if (response.success) {
         setCategories(prev => [...prev, response.data]);
+        if (response.data?.parentId) {
+          setOpenCategoryIds(prev => new Set(prev).add(response.data.parentId));
+        }
         setNewCategoryName("");
         setNewCategoryParentId("");
+        setShowCategoryForm(false);
       }
     } catch (err) {
       setCategoryError(err.message || "Không thể tạo nhóm phân loại");
@@ -335,7 +380,15 @@ export default function QuizList() {
       await deleteCategory(categoryId);
       setCategories(prev => prev.filter(category => getCategoryId(category) !== categoryId).map(category => category.parentId === categoryId ? { ...category, parentId: null } : category));
       setQuizzes(prev => prev.map(quiz => quiz.categoryId === categoryId ? { ...quiz, categoryId: null } : quiz));
-      if (selectedCategoryId === categoryId) setSelectedCategoryId("all");
+      if (selectedCategoryId === categoryId) {
+        setSelectedCategoryId("all");
+        fetchQuizzes({ categoryId: "all", search: submittedSearch, sort: sortBy });
+      }
+      setOpenCategoryIds(prev => {
+        const next = new Set(prev);
+        next.delete(categoryId);
+        return next;
+      });
     } catch (err) {
       setCategoryError(err.message || "Không thể xóa nhóm phân loại");
     }
@@ -362,59 +415,45 @@ export default function QuizList() {
     const nodeQuizzes = quizzesByCategory.get(categoryId) || [];
     const children = childrenMap.get(categoryId) || [];
     const parentOptions = categoryOptions.filter(option => option.id !== categoryId);
+    const isOpen = openCategoryIds.has(categoryId);
+    const totalQuizCount = getDescendantIds(categoryId).reduce((sum, id) => sum + (quizzesByCategory.get(id)?.length || 0), 0);
+    const hasChildren = children.length > 0;
 
     return (
       <div key={categoryId} className="relative" data-testid={`category-node-${categoryId}`}>
-        {level > 0 && <span className="absolute -left-3 top-0 h-full w-px bg-blue-100" />}
-        <div className="relative mb-2" style={{ marginLeft: level ? `${level * 16}px` : 0 }}>
-          {level > 0 && <span className="absolute -left-3 top-6 h-px w-3 bg-blue-100" />}
-          <div className={`rounded-2xl border p-2 shadow-sm transition ${isSelected ? "border-blue-200 bg-blue-50 shadow-blue-100" : "border-gray-100 bg-white hover:border-blue-100 hover:shadow-md"}`}>
-            {isEditing ? (
-              <div className="space-y-2 rounded-xl bg-white p-1">
-                <input value={editingCategoryName} onChange={(event) => setEditingCategoryName(event.target.value)} className="w-full rounded-xl border border-blue-200 px-3 py-2 text-sm font-bold text-gray-900 outline-none focus:border-blue-500" data-testid={`category-edit-name-${categoryId}`} />
-                <select value={editingCategoryParentId} onChange={(event) => setEditingCategoryParentId(event.target.value)} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-xs font-bold text-gray-700 outline-none" data-testid={`category-edit-parent-${categoryId}`}>
-                  <option value="">Không có nhóm cha</option>
-                  {parentOptions.map(option => <option key={option.id} value={option.id}>{option.path}</option>)}
-                </select>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => handleSaveCategory(categoryId)} className="flex-1 rounded-xl bg-emerald-100 px-3 py-2 text-xs font-black text-emerald-700" data-testid={`category-save-${categoryId}`}>Lưu</button>
-                  <button type="button" onClick={cancelEditCategory} className="flex-1 rounded-xl bg-gray-100 px-3 py-2 text-xs font-black text-gray-600">Hủy</button>
-                </div>
+        <div className="relative" style={{ paddingLeft: level ? `${level * 22}px` : 0 }}>
+          {level > 0 && <span className="absolute left-2 top-0 h-full w-px bg-blue-100" />}
+          {level > 0 && <span className="absolute left-2 top-5 h-px w-4 bg-blue-100" />}
+          {isEditing ? (
+            <div className="mb-2 space-y-2 rounded-2xl border border-blue-100 bg-white p-3 shadow-sm">
+              <input value={editingCategoryName} onChange={(event) => setEditingCategoryName(event.target.value)} className="w-full rounded-xl border border-blue-200 px-3 py-2 text-sm font-bold text-gray-900 outline-none focus:border-blue-500" data-testid={`category-edit-name-${categoryId}`} />
+              <select value={editingCategoryParentId} onChange={(event) => setEditingCategoryParentId(event.target.value)} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-xs font-bold text-gray-700 outline-none" data-testid={`category-edit-parent-${categoryId}`}>
+                <option value="">Không có nhóm cha</option>
+                {parentOptions.map(option => <option key={option.id} value={option.id}>{option.path}</option>)}
+              </select>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => handleSaveCategory(categoryId)} className="flex-1 rounded-xl bg-emerald-100 px-3 py-2 text-xs font-black text-emerald-700" data-testid={`category-save-${categoryId}`}>Lưu</button>
+                <button type="button" onClick={cancelEditCategory} className="flex-1 rounded-xl bg-gray-100 px-3 py-2 text-xs font-black text-gray-600">Hủy</button>
               </div>
-            ) : (
-              <>
-                <div className="flex items-center gap-2">
-                  <button type="button" onClick={() => setSelectedCategoryId(categoryId)} className={`group min-w-0 flex-1 rounded-xl px-3 py-2 text-left transition ${isSelected ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-100" : "bg-gradient-to-r from-gray-50 to-white text-gray-800 hover:from-blue-50 hover:to-indigo-50 hover:text-blue-700"}`}>
-                    <span className="flex items-center gap-2">
-                      <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-xs font-black ${isSelected ? "bg-white/20 text-white" : "bg-blue-100 text-blue-700 group-hover:bg-blue-600 group-hover:text-white"}`}>
-                        {children.length ? "▦" : "▣"}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-black">{category.name}</span>
-                        <span className={isSelected ? "text-xs font-bold text-blue-100" : "text-xs font-bold text-gray-500"}>{children.length} nhóm con</span>
-                      </span>
-                      <span className={`rounded-full px-2 py-1 text-[11px] font-black ${isSelected ? "bg-white/20 text-white" : "bg-blue-100 text-blue-700"}`}>{nodeQuizzes.length}</span>
-                    </span>
-                  </button>
-                  <button type="button" onClick={() => startEditCategory(category)} className="rounded-xl border border-gray-200 bg-white p-2 text-gray-500 shadow-sm hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700" aria-label="Sửa nhóm"><Edit3 className="h-3.5 w-3.5" /></button>
-                  <button type="button" onClick={() => handleDeleteCategory(categoryId)} className="rounded-xl border border-red-100 bg-white p-2 text-red-500 shadow-sm hover:bg-red-50" aria-label="Xóa nhóm"><Trash2 className="h-3.5 w-3.5" /></button>
-                </div>
-                {nodeQuizzes.length > 0 && (
-                  <div className="mt-2 space-y-1 border-l-2 border-dashed border-blue-100 pl-3">
-                    {nodeQuizzes.slice(0, 5).map(quiz => (
-                      <button key={getQuizId(quiz)} type="button" onClick={() => { setSelectedCategoryId(categoryId); setSearchTerm(quiz.title || ""); }} className="group flex w-full items-center gap-2 rounded-xl bg-slate-50 px-2.5 py-1.5 text-left text-xs font-bold text-gray-600 transition hover:bg-blue-50 hover:text-blue-700">
-                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-blue-300 group-hover:bg-blue-600" />
-                        <span className="truncate">{quiz.title || "Quiz chưa đặt tên"}</span>
-                      </button>
-                    ))}
-                    {nodeQuizzes.length > 5 && <p className="px-2 text-xs font-bold text-gray-400">+{nodeQuizzes.length - 5} quiz khác</p>}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className={`group mb-1 flex items-center gap-2 rounded-2xl px-3 py-2 transition ${isSelected ? "bg-white shadow-md ring-1 ring-blue-100" : "hover:bg-white/80"}`}>
+              <button type="button" onClick={() => selectCategory(categoryId)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+                <Folder className={`h-4 w-4 shrink-0 ${isSelected ? "text-blue-700" : "text-blue-500"}`} />
+                <span className={`truncate text-sm font-black ${isSelected ? "text-blue-800" : "text-gray-700"}`}>{category.name}</span>
+              </button>
+              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-black text-blue-700">{totalQuizCount}</span>
+              {hasChildren && (
+                <button type="button" onClick={() => toggleCategoryOpen(categoryId)} className="rounded-lg p-1 text-gray-500 hover:bg-blue-100 hover:text-blue-700" aria-label={isOpen ? "Thu gọn nhóm" : "Mở nhóm"}>
+                  {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                </button>
+              )}
+              <button type="button" onClick={() => startEditCategory(category)} className="rounded-lg p-1 text-gray-400 opacity-0 transition hover:bg-blue-50 hover:text-blue-700 group-hover:opacity-100" aria-label="Sửa nhóm"><Edit3 className="h-3.5 w-3.5" /></button>
+              <button type="button" onClick={() => handleDeleteCategory(categoryId)} className="rounded-lg p-1 text-red-400 opacity-0 transition hover:bg-red-50 hover:text-red-600 group-hover:opacity-100" aria-label="Xóa nhóm"><Trash2 className="h-3.5 w-3.5" /></button>
+            </div>
+          )}
         </div>
-        {children.map(child => renderCategoryNode(child, level + 1))}
+        {isOpen && children.map(child => renderCategoryNode(child, level + 1))}
       </div>
     );
   };
@@ -435,12 +474,10 @@ export default function QuizList() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-emerald-50">
-      <div className="relative z-10 mx-auto max-w-7xl px-6 py-10">
+      <div className="relative z-10 mx-auto max-w-[96rem] px-4 py-8 sm:px-6 lg:px-8">
         <div className="mb-8 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-blue-100 bg-white px-3 py-1 text-sm font-bold text-blue-700 shadow-sm"><Sparkles className="h-4 w-4" />Không gian quản lý quiz</div>
             <h1 className="text-4xl font-black text-gray-900">Danh sách Quiz</h1>
-            <p className="mt-2 max-w-2xl text-gray-600">Tìm nhanh, xem cấu trúc câu hỏi, copy link chia sẻ và bắt đầu làm bài từ một nơi.</p>
           </div>
           <Button onClick={() => navigate("/")} className="h-12 rounded-2xl bg-blue-600 px-5 font-bold text-white hover:bg-blue-700"><Plus className="mr-2 h-5 w-5" />Tạo quiz mới</Button>
         </div>
@@ -459,43 +496,52 @@ export default function QuizList() {
           })}
         </div>
 
-        <div className="mb-6 grid gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm lg:grid-cols-[1fr_auto_auto]">
-          <label className="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2"><Search className="h-5 w-5 text-gray-500" /><input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Tìm theo tên, mô tả, nhóm phân loại hoặc nội dung câu hỏi" className="w-full bg-transparent text-sm font-medium text-gray-900 outline-none placeholder:text-gray-400" /></label>
-          <select value={sortBy} onChange={(event) => setSortBy(event.target.value)} className="h-11 rounded-xl border border-gray-200 bg-gray-50 px-3 text-sm font-bold text-gray-700 outline-none"><option value="latest">Mới cập nhật</option><option value="title">Tên A-Z</option><option value="questions">Nhiều câu hỏi</option><option value="time">Thời gian dài</option></select>
+        <div className="mb-6 grid gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm lg:grid-cols-[1fr_auto_auto_auto]">
+          <div className="space-y-2"><label className="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2"><Search className="h-5 w-5 text-gray-500" /><input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} onKeyDown={handleSearchKeyDown} placeholder="Tìm theo tên, mô tả, nhóm phân loại hoặc nội dung câu hỏi" className="w-full bg-transparent text-sm font-medium text-gray-900 outline-none placeholder:text-gray-400" /></label>{(selectedCategoryId !== "all" || submittedSearch) && (<div className="flex flex-wrap items-center gap-2 text-xs font-bold text-gray-600">{selectedCategoryId !== "all" && <span className="rounded-full bg-blue-50 px-3 py-1 text-blue-700">Đang lọc: {getSelectedCategoryLabel()}</span>}{submittedSearch && <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">Từ khóa: {submittedSearch}</span>}{selectedCategoryId !== "all" && <button type="button" onClick={() => applyCategory("all")} className="rounded-full bg-white px-3 py-1 text-blue-700 ring-1 ring-blue-100 hover:bg-blue-50">Bỏ lọc nhóm</button>}{submittedSearch && <button type="button" onClick={clearSearch} className="rounded-full bg-white px-3 py-1 text-emerald-700 ring-1 ring-emerald-100 hover:bg-emerald-50">Xóa tìm kiếm</button>}</div>)}</div>
+          <Button type="button" onClick={handleSearchSubmit} className="h-11 rounded-xl bg-blue-600 px-5 font-bold text-white hover:bg-blue-700"><Search className="mr-2 h-4 w-4" />Tìm kiếm</Button>
+          <select value={sortBy} onChange={(event) => handleSortChange(event.target.value)} className="h-11 rounded-xl border border-gray-200 bg-gray-50 px-3 text-sm font-bold text-gray-700 outline-none"><option value="latest">Mới cập nhật</option><option value="title">Tên A-Z</option><option value="questions">Nhiều câu hỏi</option><option value="time">Thời gian dài</option></select>
           <div className="grid grid-cols-2 rounded-xl border border-gray-200 bg-gray-50 p-1">
             <button type="button" onClick={() => setViewMode("grid")} className={`flex h-9 items-center justify-center rounded-lg px-3 text-sm font-bold ${viewMode === "grid" ? "bg-white text-blue-700 shadow-sm" : "text-gray-500"}`} aria-label="Hiển thị dạng lưới"><LayoutGrid className="h-4 w-4" /></button>
             <button type="button" onClick={() => setViewMode("compact")} className={`flex h-9 items-center justify-center rounded-lg px-3 text-sm font-bold ${viewMode === "compact" ? "bg-white text-blue-700 shadow-sm" : "text-gray-500"}`} aria-label="Hiển thị dạng gọn"><ListChecks className="h-4 w-4" /></button>
           </div>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[20rem_1fr]">
+        <div className="grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)] xl:grid-cols-[20rem_minmax(0,1fr)]">
           <aside className="space-y-4">
-            <Card className="overflow-hidden rounded-[2rem] border-2 border-blue-100 bg-white shadow-xl shadow-blue-100/50">
+            <Card className="overflow-hidden rounded-3xl border border-blue-100 bg-white shadow-xl shadow-blue-100/60">
               <CardContent className="p-0">
-                <div className="bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 p-5 text-white">
+                <div className="bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-600 px-5 py-4 text-white">
                   <div className="flex items-center gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15 shadow-inner"><FolderTree className="h-6 w-6" /></div>
-                    <div>
-                      <h2 className="text-lg font-black">Cây phân loại</h2>
-                      <p className="text-xs font-semibold text-blue-100">Cha &gt; con &gt; quiz</p>
-                    </div>
+                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/15"><FolderTree className="h-5 w-5" /></div>
+                    <h2 className="text-lg font-black">Cây phân loại</h2>
                   </div>
                 </div>
-                <div className="p-4">
-                <div className="mb-4 grid grid-cols-2 gap-2 rounded-2xl bg-slate-100 p-1">
-                  <button type="button" onClick={() => setSelectedCategoryId("all")} className={`rounded-xl px-3 py-2 text-sm font-black transition ${selectedCategoryId === "all" ? "bg-white text-blue-700 shadow-sm" : "text-gray-600 hover:text-blue-700"}`}>Tất cả</button>
-                  <button type="button" onClick={() => setSelectedCategoryId("uncategorized")} className={`rounded-xl px-3 py-2 text-sm font-black transition ${selectedCategoryId === "uncategorized" ? "bg-white text-blue-700 shadow-sm" : "text-gray-600 hover:text-blue-700"}`}>Chưa phân loại</button>
-                </div>
-                <div className="mb-4 space-y-2 rounded-3xl border border-blue-100 bg-gradient-to-br from-blue-50 to-indigo-50 p-3 shadow-inner">
-                  <input value={newCategoryName} onChange={(event) => setNewCategoryName(event.target.value)} placeholder="Tên nhóm mới" className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-bold text-gray-900 outline-none focus:border-blue-500" data-testid="new-category-name" />
-                  <select value={newCategoryParentId} onChange={(event) => setNewCategoryParentId(event.target.value)} className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-bold text-gray-700 outline-none" data-testid="new-category-parent"><option value="">Không có nhóm cha</option>{categoryOptions.map(category => <option key={category.id} value={category.id}>{category.path}</option>)}</select>
-                  <Button type="button" onClick={handleCreateCategory} className="h-10 w-full rounded-xl bg-blue-600 font-bold text-white hover:bg-blue-700" data-testid="create-category-button"><Plus className="mr-2 h-4 w-4" />Thêm nhóm</Button>
-                  {categoryError && <p className="text-xs font-bold text-red-600">{categoryError}</p>}
-                </div>
-                <div className="space-y-2">
-                  {rootCategories.length === 0 ? <p className="rounded-2xl bg-gray-50 p-3 text-sm font-semibold text-gray-500">Chưa có nhóm phân loại.</p> : rootCategories.map(category => renderCategoryNode(category))}
-                  {uncategorizedQuizzes.length > 0 && <div className="rounded-2xl border border-gray-100 bg-white p-2"><p className="mb-2 px-3 text-xs font-black uppercase text-gray-500">Quiz chưa phân loại</p><div className="space-y-1 pl-2">{uncategorizedQuizzes.slice(0, 6).map(quiz => <button key={getQuizId(quiz)} type="button" onClick={() => { setSelectedCategoryId("uncategorized"); setSearchTerm(quiz.title || ""); }} className="block w-full truncate rounded-lg bg-gray-50 px-2 py-1 text-left text-xs font-semibold text-gray-600 hover:bg-blue-50 hover:text-blue-700">{quiz.title || "Quiz chưa đặt tên"}</button>)}</div></div>}
-                </div>
+                <div className="space-y-3 bg-gradient-to-b from-white to-blue-50/50 p-4">
+                  <button type="button" onClick={() => setShowCategoryForm(!showCategoryForm)} className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-blue-50 text-sm font-black text-blue-700 transition hover:bg-blue-100">
+                    <Plus className="h-4 w-4" />
+                    Thêm nhóm
+                  </button>
+                  {showCategoryForm && (
+                    <div className="space-y-2 rounded-2xl border border-blue-100 bg-white p-3 shadow-sm">
+                      <input value={newCategoryName} onChange={(event) => setNewCategoryName(event.target.value)} placeholder="Tên nhóm mới" className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-bold text-gray-900 outline-none focus:border-blue-500" data-testid="new-category-name" />
+                      <select value={newCategoryParentId} onChange={(event) => setNewCategoryParentId(event.target.value)} className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-bold text-gray-700 outline-none" data-testid="new-category-parent"><option value="">Không có nhóm cha</option>{categoryOptions.map(category => <option key={category.id} value={category.id}>{category.path}</option>)}</select>
+                      <Button type="button" onClick={handleCreateCategory} className="h-10 w-full rounded-xl bg-blue-600 font-bold text-white hover:bg-blue-700" data-testid="create-category-button"><Plus className="mr-2 h-4 w-4" />Lưu nhóm</Button>
+                      {categoryError && <p className="text-xs font-bold text-red-600">{categoryError}</p>}
+                    </div>
+                  )}
+                  <div className="space-y-1 rounded-3xl bg-white/70 p-2 shadow-inner">
+                    <button type="button" onClick={() => setSelectedCategoryId("all")} className={`flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left transition ${selectedCategoryId === "all" ? "bg-white text-blue-800 shadow-md" : "text-gray-700 hover:bg-white"}`}>
+                      <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-100 text-blue-700"><FolderTree className="h-4 w-4" /></span>
+                      <span className="min-w-0 flex-1 truncate text-sm font-black">Tất cả quiz</span>
+                      <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-black text-blue-700">{quizzes.length}</span>
+                    </button>
+                    {rootCategories.length === 0 ? <p className="rounded-2xl p-3 text-sm font-semibold text-gray-500">Chưa có nhóm phân loại.</p> : rootCategories.map(category => renderCategoryNode(category))}
+                    <button type="button" onClick={() => setSelectedCategoryId("uncategorized")} className={`flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left transition ${selectedCategoryId === "uncategorized" ? "bg-white text-blue-800 shadow-md" : "text-gray-700 hover:bg-white"}`}>
+                      <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 text-slate-500"><Folder className="h-4 w-4" /></span>
+                      <span className="min-w-0 flex-1 truncate text-sm font-black">Chưa phân loại</span>
+                      <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-black text-slate-600">{uncategorizedQuizzes.length}</span>
+                    </button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -504,11 +550,11 @@ export default function QuizList() {
           <section>
             {quizzes.length === 0 ? (
               <Card className="rounded-[2rem] border-2 border-gray-200 bg-white shadow-xl"><CardContent className="p-12 text-center"><FileQuestion className="mx-auto mb-4 h-16 w-16 text-gray-300" /><h3 className="mb-2 text-xl font-bold text-gray-900">Chưa có quiz nào</h3><p className="mb-6 text-gray-600">Hãy tạo quiz đầu tiên của bạn</p><Button onClick={() => navigate("/")} className="rounded-2xl bg-blue-600 text-white hover:bg-blue-700">Tạo quiz ngay</Button></CardContent></Card>
-            ) : filteredQuizzes.length === 0 ? (
+            ) : quizzes.length === 0 ? (
               <div className="rounded-2xl border border-amber-200 bg-amber-50 p-8 text-center"><Search className="mx-auto mb-3 h-10 w-10 text-amber-600" /><h3 className="font-black text-gray-900">Không tìm thấy quiz phù hợp</h3><p className="mt-1 text-sm text-gray-600">Thử đổi từ khóa, nhóm phân loại hoặc bộ sắp xếp.</p></div>
             ) : (
-              <div className={viewMode === "grid" ? "grid gap-6 xl:grid-cols-2" : "space-y-4"}>
-                {filteredQuizzes.map((quiz, idx) => {
+              <div className={viewMode === "grid" ? "grid gap-6 xl:grid-cols-2 2xl:grid-cols-3" : "space-y-4"}>
+                {quizzes.map((quiz, idx) => {
                   const quizId = getQuizId(quiz);
                   const metrics = getQuizMetrics(quiz);
                   const isExpanded = expandedQuizId === quizId;

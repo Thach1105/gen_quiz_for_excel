@@ -72,9 +72,16 @@ export const getQuizById = async (id) => {
 /**
  * Get all quizzes
  */
-export const getAllQuizzes = async (limit = 10, offset = 0) => {
+export const getAllQuizzes = async ({ limit = 10, offset = 0, search = "", categoryId = "all", sortBy = "latest" } = {}) => {
   try {
-    const response = await fetch(`${API_URL}/api/quiz?limit=${limit}&offset=${offset}`);
+    const params = new URLSearchParams({
+      limit: String(limit),
+      offset: String(offset),
+      search,
+      categoryId,
+      sortBy,
+    });
+    const response = await fetch(`${API_URL}/api/quiz?${params.toString()}`);
 
     if (!response.ok) {
       const error = await response.json();

@@ -30,6 +30,63 @@ const listQuizzes = [
   },
 ];
 
+const normalizeSearchText = value => String(value || "")
+  .normalize("NFD")
+  .replace(/[̀-ͯ]/g, "")
+  .replace(/đ/g, "d")
+  .replace(/Đ/g, "D")
+  .toLowerCase();
+
+const getCategoryPath = categoryId => {
+  if (!categoryId) return "Chưa phân loại";
+  const categoryMap = new Map(mockCategories.map(category => [category.id, category]));
+  const category = categoryMap.get(categoryId);
+  if (!category) return "Chưa phân loại";
+  const path = [category.name];
+  let parent = categoryMap.get(category.parentId);
+  while (parent) {
+    path.unshift(parent.name);
+    parent = categoryMap.get(parent.parentId);
+  }
+  return path.join(" ");
+};
+
+const getDescendantCategoryIds = categoryId => {
+  const ids = [categoryId];
+  mockCategories
+    .filter(category => category.parentId === categoryId)
+    .forEach(category => ids.push(...getDescendantCategoryIds(category.id)));
+  return ids;
+};
+
+const filterListQuizzes = url => {
+  const parsedUrl = new URL(url);
+  const searchTokens = normalizeSearchText(parsedUrl.searchParams.get("search") || "")
+    .split(/\s+/)
+    .filter(Boolean);
+  const categoryId = parsedUrl.searchParams.get("categoryId") || "all";
+  const sortBy = parsedUrl.searchParams.get("sortBy") || "latest";
+
+  return listQuizzes
+    .filter(quiz => {
+      if (categoryId === "uncategorized" && quiz.categoryId) return false;
+      if (categoryId !== "all" && categoryId !== "uncategorized" && !getDescendantCategoryIds(categoryId).includes(quiz.categoryId)) return false;
+
+      const text = normalizeSearchText([
+        quiz.title,
+        quiz.description,
+        getCategoryPath(quiz.categoryId),
+      ].join(" "));
+      return searchTokens.every(token => text.split(/\s+/).some(word => word.includes(token)));
+    })
+    .sort((a, b) => {
+      if (sortBy === "title") return String(a.title || "").localeCompare(String(b.title || ""), "vi");
+      if (sortBy === "questions") return (b.questions?.length || 0) - (a.questions?.length || 0);
+      if (sortBy === "time") return (b.settings?.timeLimit || 0) - (a.settings?.timeLimit || 0);
+      return new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime();
+    });
+};
+
 test.describe("Quiz List", () => {
   test.beforeEach(async ({ page }) => {
     await page.route("**/api/quiz**", async route => {
@@ -59,16 +116,17 @@ test.describe("Quiz List", () => {
       }
 
       if (request.method() === "GET" && url.includes("/api/quiz?")) {
+        const data = filterListQuizzes(url);
         await route.fulfill({
           status: 200,
           contentType: "application/json",
           body: JSON.stringify({
             success: true,
-            data: listQuizzes,
+            data,
             pagination: {
               limit: 100,
               offset: 0,
-              total: listQuizzes.length,
+              total: data.length,
             },
           }),
         });
@@ -115,11 +173,13 @@ test.describe("Quiz List", () => {
   test("should show dashboard, search quizzes and expand preview", async ({ page }) => {
     await page.goto("/quizzes");
 
-    await expect(page.getByText("Không gian quản lý quiz")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Danh sách Quiz" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Quiz comma nâng cao" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Quiz cơ bản" })).toBeVisible();
 
-    await page.getByPlaceholder("Tìm theo tên, mô tả, nhóm phân loại hoặc nội dung câu hỏi").fill("comma");
+    await page.getByPlaceholder("Tìm theo tên, mô tả, nhóm phân loại hoặc nội dung câu hỏi").fill("duoc nen");
+    await expect(page.getByRole("heading", { name: "Quiz cơ bản" })).toBeVisible();
+    await page.getByRole("button", { name: "Tìm kiếm" }).click();
     await expect(page.getByRole("heading", { name: "Quiz comma nâng cao" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Quiz cơ bản" })).toHaveCount(0);
 
@@ -188,12 +248,23 @@ test.describe("Quiz List", () => {
     await page.goto("/quizzes");
 
     await expect(page.getByText("Cây phân loại")).toBeVisible();
-    await expect(page.getByRole("button", { name: /Dược lý 1 nhóm con 0/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Viên nén 0 nhóm con 1/i })).toBeVisible();
+    await expect(page.getByTestId("category-node-cat-pharma")).toContainText("Dược lý");
+    await expect(page.getByTestId("category-node-cat-tablet")).toHaveCount(0);
 
-    await page.getByRole("button", { name: /Dược lý 1 nhóm con 0/i }).click();
+    await page.getByRole("button", { name: "Mở nhóm" }).click();
+    await expect(page.getByTestId("category-node-cat-tablet")).toContainText("Viên nén");
+
+    await page.getByTestId("category-node-cat-pharma").getByText("Dược lý").click();
     await expect(page.getByRole("heading", { name: "Quiz comma nâng cao" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Quiz cơ bản" })).toHaveCount(0);
+
+    await page.getByPlaceholder("Tìm theo tên, mô tả, nhóm phân loại hoặc nội dung câu hỏi").fill("co ban");
+    await page.getByRole("button", { name: "Tìm kiếm" }).click();
+    await expect(page.getByText("Từ khóa: co ban")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Quiz cơ bản" })).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Bỏ lọc nhóm" }).click();
+    await expect(page.getByRole("heading", { name: "Quiz cơ bản" })).toBeVisible();
 
     await page.getByRole("button", { name: "Tất cả" }).click();
     await page.getByTestId("quiz-category-select-quiz-basic").selectOption("cat-tablet");
@@ -204,10 +275,12 @@ test.describe("Quiz List", () => {
   test("should create category from category tree panel", async ({ page }) => {
     await page.goto("/quizzes");
 
+    await page.getByRole("button", { name: "Thêm nhóm" }).click();
     await page.getByTestId("new-category-name").fill("Tá dược");
     await page.getByTestId("new-category-parent").selectOption("cat-tablet");
     await page.getByTestId("create-category-button").click();
 
-    await expect(page.getByRole("button", { name: /Tá dược 0 nhóm con 0/i })).toBeVisible();
+    await page.getByRole("button", { name: "Mở nhóm" }).click();
+    await expect(page.getByTestId("category-node-cat-new")).toContainText("Tá dược");
   });
 });
