@@ -5,6 +5,8 @@ import {
   Award,
   BarChart3,
   CheckCircle,
+  ChevronDown,
+  ChevronUp,
   Clock,
   Flag,
   Home,
@@ -26,6 +28,7 @@ export default function QuizResult() {
   const navigate = useNavigate();
   const location = useLocation();
   const [filter, setFilter] = useState("all");
+  const [expandedQuestions, setExpandedQuestions] = useState(new Set());
   const {
     quiz,
     answers = {},
@@ -115,6 +118,26 @@ export default function QuizResult() {
     { id: "unanswered", label: "Chưa trả lời", count: unansweredCount },
     { id: "flagged", label: "Đã đánh dấu", count: flaggedCount },
   ];
+
+  const toggleQuestion = (questionId) => {
+    setExpandedQuestions(prev => {
+      const next = new Set(prev);
+      if (next.has(questionId)) {
+        next.delete(questionId);
+      } else {
+        next.add(questionId);
+      }
+      return next;
+    });
+  };
+
+  const expandFilteredQuestions = () => {
+    setExpandedQuestions(new Set(filteredQuestionResults.map(item => item.question.id)));
+  };
+
+  const collapseAllQuestions = () => {
+    setExpandedQuestions(new Set());
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-emerald-50">
@@ -238,6 +261,24 @@ export default function QuizResult() {
                   ))}
                 </div>
               </div>
+              <div className="mb-4 flex flex-wrap justify-end gap-2">
+                <Button
+                  type="button"
+                  onClick={expandFilteredQuestions}
+                  variant="outline"
+                  className="h-10 rounded-2xl border-gray-300 text-sm font-bold"
+                >
+                  Mở các câu đang lọc
+                </Button>
+                <Button
+                  type="button"
+                  onClick={collapseAllQuestions}
+                  variant="outline"
+                  className="h-10 rounded-2xl border-gray-300 text-sm font-bold"
+                >
+                  Thu gọn tất cả
+                </Button>
+              </div>
 
               {filteredQuestionResults.length === 0 ? (
                 <div className="rounded-2xl border border-gray-200 bg-gray-50 p-8 text-center">
@@ -247,7 +288,7 @@ export default function QuizResult() {
               ) : (
                 <div className="space-y-4">
                   {filteredQuestionResults.map(({ question, idx, userAnswer, answered, correct, flagged }) => (
-                    <motion.div
+                    <motion.article
                       key={question.id}
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
@@ -260,14 +301,22 @@ export default function QuizResult() {
                             : "border-gray-200 bg-gray-50"
                       }`}
                     >
-                      <div className="flex items-start gap-3">
-                        {correct ? (
-                          <CheckCircle className="mt-1 h-6 w-6 flex-shrink-0 text-emerald-600" />
-                        ) : (
-                          <XCircle className={`mt-1 h-6 w-6 flex-shrink-0 ${answered ? "text-red-600" : "text-gray-400"}`} />
-                        )}
-                        <div className="flex-1">
-                          <div className="mb-2 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => toggleQuestion(question.id)}
+                        className="flex w-full items-start gap-3 text-left"
+                        data-testid={`result-question-toggle-${question.id}`}
+                        aria-expanded={expandedQuestions.has(question.id)}
+                      >
+                        <span className="mt-1">
+                          {correct ? (
+                            <CheckCircle className="h-6 w-6 flex-shrink-0 text-emerald-600" />
+                          ) : (
+                            <XCircle className={`h-6 w-6 flex-shrink-0 ${answered ? "text-red-600" : "text-gray-400"}`} />
+                          )}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="mb-2 flex flex-wrap items-center gap-2">
                             <span className="text-sm font-bold text-gray-700">Câu {question.id}</span>
                             <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${
                               correct
@@ -284,8 +333,25 @@ export default function QuizResult() {
                                 Đã đánh dấu
                               </span>
                             )}
+                          </span>
+                          <span className="block truncate font-medium text-gray-900 md:whitespace-normal">
+                            {question.question}
+                          </span>
+                        </span>
+                        <span className="mt-1 text-gray-500">
+                          {expandedQuestions.has(question.id) ? (
+                            <ChevronUp className="h-5 w-5" />
+                          ) : (
+                            <ChevronDown className="h-5 w-5" />
+                          )}
+                        </span>
+                      </button>
+
+                      {expandedQuestions.has(question.id) && (
+                        <div className="mt-4 border-t border-white/70 pt-4" data-testid={`result-question-detail-${question.id}`}>
+                          <div className="mb-3 rounded-xl bg-white/80 p-3 text-sm text-gray-800">
+                            {question.question}
                           </div>
-                          <p className="mb-3 font-medium text-gray-900">{question.question}</p>
                           <div className="space-y-2 text-sm">
                             <div>
                               <span className="text-gray-600">Câu trả lời của bạn: </span>
@@ -305,8 +371,8 @@ export default function QuizResult() {
                             )}
                           </div>
                         </div>
-                      </div>
-                    </motion.div>
+                      )}
+                    </motion.article>
                   ))}
                 </div>
               )}

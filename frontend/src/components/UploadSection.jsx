@@ -7,6 +7,7 @@ import { uploadExcelFile } from "@/services/api";
 
 export default function UploadSection({ onQuestionsLoaded, onCreateQuiz }) {
   const [fileName, setFileName] = useState("");
+  const [quizTitle, setQuizTitle] = useState("");
   const [shuffle, setShuffle] = useState(true);
   const [timeLimit, setTimeLimit] = useState(30);
   const [uploading, setUploading] = useState(false);
@@ -63,6 +64,8 @@ export default function UploadSection({ onQuestionsLoaded, onCreateQuiz }) {
     }
 
     onCreateQuiz({
+      quizTitle,
+      fileName,
       shuffle,
       timeLimit,
     });
@@ -143,6 +146,23 @@ export default function UploadSection({ onQuestionsLoaded, onCreateQuiz }) {
           )}
 
           <div className="mb-6 space-y-4">
+            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+              <label htmlFor="quiz-title" className="mb-2 block text-sm font-semibold text-gray-900">
+                Tên quiz
+              </label>
+              <input
+                id="quiz-title"
+                type="text"
+                value={quizTitle}
+                onChange={(e) => setQuizTitle(e.target.value)}
+                placeholder="Để trống để hệ thống tự đặt tên"
+                className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              />
+              <p className="mt-2 text-xs text-gray-500">
+                Nếu không nhập, tên sẽ được tạo từ tên file hoặc câu hỏi đầu tiên kèm thời gian.
+              </p>
+            </div>
+
             <div className="flex items-center justify-between rounded-2xl border border-gray-200 bg-gray-50 p-4">
               <div className="flex items-center gap-3">
                 <Shuffle className="h-5 w-5 text-gray-700" />

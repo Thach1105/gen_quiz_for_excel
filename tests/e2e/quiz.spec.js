@@ -27,6 +27,9 @@ test.describe("Quiz Taking Flow", () => {
     await page.getByTestId("submit-quiz").click();
 
     await expect(page.getByText("Kết quả của bạn")).toBeVisible();
+    await expect(page.getByTestId("result-question-detail-2")).toHaveCount(0);
+    await page.getByTestId("result-question-toggle-2").click();
+    await page.getByTestId("result-question-toggle-3").click();
     await expect(page.getByText("Đáp án đúng:").first()).toBeVisible();
     await expect(page.getByText("Correct option, with comma; Correct option 2").first()).toBeVisible();
     await expect(page.getByText("The correct answer for the last question is Three.")).toBeVisible();

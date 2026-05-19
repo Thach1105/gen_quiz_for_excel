@@ -8,6 +8,28 @@ import PreviewSection from "@/components/PreviewSection";
 import FooterSection from "@/components/FooterSection";
 import { createQuiz } from "@/services/api";
 
+const normalizeKeyword = (value) =>
+  String(value || "")
+    .replace(/\.[^/.]+$/, "")
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const getQuestionKeyword = (questions) => {
+  const firstQuestion = normalizeKeyword(questions?.[0]?.question);
+  return firstQuestion.split(" ").filter(Boolean).slice(0, 8).join(" ");
+};
+
+const padDatePart = (value) => String(value).padStart(2, "0");
+
+const formatTitleTime = (date = new Date()) =>
+  `${padDatePart(date.getDate())}/${padDatePart(date.getMonth() + 1)}/${date.getFullYear()} ${padDatePart(date.getHours())}:${padDatePart(date.getMinutes())}`;
+
+const generateQuizTitle = ({ fileName, questions }) => {
+  const keyword = normalizeKeyword(fileName) || getQuestionKeyword(questions) || "Quiz";
+  return `${keyword} - ${formatTitleTime()}`;
+};
+
 export default function Home() {
   const navigate = useNavigate();
   const [questions, setQuestions] = useState([]);
@@ -37,7 +59,10 @@ export default function Home() {
 
     try {
       const quizData = {
-        title: "Quiz từ Excel",
+        title: settings.quizTitle?.trim() || generateQuizTitle({
+          fileName: settings.fileName,
+          questions,
+        }),
         description: "Quiz được tạo từ file Excel",
         questions,
         settings: {

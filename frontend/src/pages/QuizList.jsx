@@ -6,20 +6,23 @@ import {
   CheckCircle2,
   Clock,
   Copy,
+  Edit3,
   FileQuestion,
   LayoutGrid,
   ListChecks,
   PlayCircle,
   Plus,
+  Save,
   Search,
   Share2,
   Shuffle,
   Sparkles,
   Trash2,
+  X,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { deleteQuiz, getAllQuizzes } from "@/services/api";
+import { deleteQuiz, getAllQuizzes, updateQuiz } from "@/services/api";
 import { isMultipleChoice } from "@/utils/questionType";
 
 const getQuizId = (quiz) => quiz.id || quiz._id;
@@ -55,6 +58,14 @@ export default function QuizList() {
   const [viewMode, setViewMode] = useState("grid");
   const [copiedId, setCopiedId] = useState(null);
   const [expandedQuizId, setExpandedQuizId] = useState(null);
+  const [editingQuizId, setEditingQuizId] = useState(null);
+  const [editingTitle, setEditingTitle] = useState("");
+  const [renamingId, setRenamingId] = useState(null);
+  const [renameError, setRenameError] = useState(null);
+  const [editingTimeQuizId, setEditingTimeQuizId] = useState(null);
+  const [editingTimeLimit, setEditingTimeLimit] = useState("");
+  const [savingTimeId, setSavingTimeId] = useState(null);
+  const [timeEditError, setTimeEditError] = useState(null);
 
   useEffect(() => {
     fetchQuizzes();
@@ -145,6 +156,110 @@ export default function QuizList() {
 
   const togglePreview = (id) => {
     setExpandedQuizId(prev => (prev === id ? null : id));
+  };
+
+  const startRename = (quiz) => {
+    setEditingQuizId(getQuizId(quiz));
+    setEditingTitle(quiz.title || "");
+    setRenameError(null);
+  };
+
+  const cancelRename = () => {
+    setEditingQuizId(null);
+    setEditingTitle("");
+    setRenameError(null);
+  };
+
+  const handleSaveRename = async (id) => {
+    const nextTitle = editingTitle.trim();
+    if (!nextTitle) {
+      setRenameError("Tên quiz không được để trống");
+      return;
+    }
+
+    try {
+      setRenamingId(id);
+      setRenameError(null);
+      const response = await updateQuiz(id, { title: nextTitle });
+      const updatedQuiz = response.data;
+      setQuizzes(prev => prev.map(quiz => (
+        getQuizId(quiz) === id
+          ? { ...quiz, title: updatedQuiz?.title || nextTitle, updatedAt: updatedQuiz?.updatedAt || quiz.updatedAt }
+          : quiz
+      )));
+      cancelRename();
+    } catch (err) {
+      setRenameError(err.message || "Không thể cập nhật tên quiz");
+    } finally {
+      setRenamingId(null);
+    }
+  };
+
+  const handleRenameKeyDown = (event, id) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      handleSaveRename(id);
+    }
+    if (event.key === "Escape") {
+      cancelRename();
+    }
+  };
+
+  const startEditTime = (quiz) => {
+    setEditingTimeQuizId(getQuizId(quiz));
+    setEditingTimeLimit(String(getQuizMetrics(quiz).timeLimit));
+    setTimeEditError(null);
+  };
+
+  const cancelEditTime = () => {
+    setEditingTimeQuizId(null);
+    setEditingTimeLimit("");
+    setTimeEditError(null);
+  };
+
+  const handleSaveTime = async (quiz) => {
+    const quizId = getQuizId(quiz);
+    const nextTimeLimit = Number.parseInt(editingTimeLimit, 10);
+    if (!Number.isInteger(nextTimeLimit) || nextTimeLimit < 1 || nextTimeLimit > 180) {
+      setTimeEditError("Thời gian phải từ 1 đến 180 phút");
+      return;
+    }
+
+    const nextSettings = {
+      ...(quiz.settings || {}),
+      timeLimit: nextTimeLimit,
+    };
+
+    try {
+      setSavingTimeId(quizId);
+      setTimeEditError(null);
+      const response = await updateQuiz(quizId, { settings: nextSettings });
+      const updatedQuiz = response.data;
+      setQuizzes(prev => prev.map(item => (
+        getQuizId(item) === quizId
+          ? {
+              ...item,
+              settings: updatedQuiz?.settings || nextSettings,
+              updatedAt: updatedQuiz?.updatedAt || item.updatedAt,
+            }
+          : item
+      )));
+      cancelEditTime();
+    } catch (err) {
+      setTimeEditError(err.message || "Không thể cập nhật thời gian");
+    } finally {
+      setSavingTimeId(null);
+    }
+  };
+
+  const handleTimeKeyDown = (event, quiz) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      handleSaveTime(quiz);
+    }
+    if (event.key === "Escape") {
+      cancelEditTime();
+    }
   };
 
   if (loading) {
@@ -280,6 +395,8 @@ export default function QuizList() {
               const metrics = getQuizMetrics(quiz);
               const isExpanded = expandedQuizId === quizId;
               const compact = viewMode === "compact";
+              const isEditing = editingQuizId === quizId;
+              const isEditingTime = editingTimeQuizId === quizId;
 
               return (
                 <motion.div
@@ -305,9 +422,61 @@ export default function QuizList() {
                             )}
                           </div>
 
-                          <h3 className="mb-2 text-xl font-black text-gray-900">
-                            {quiz.title || "Untitled Quiz"}
-                          </h3>
+                          <div className="mb-2">
+                            {isEditing ? (
+                              <div>
+                                <div className="flex gap-2">
+                                  <input
+                                    value={editingTitle}
+                                    onChange={(event) => setEditingTitle(event.target.value)}
+                                    onKeyDown={(event) => handleRenameKeyDown(event, quizId)}
+                                    autoFocus
+                                    data-testid={`rename-input-${quizId}`}
+                                    className="min-w-0 flex-1 rounded-xl border border-blue-200 bg-white px-3 py-2 text-lg font-black text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                  />
+                                  <Button
+                                    type="button"
+                                    onClick={() => handleSaveRename(quizId)}
+                                    disabled={renamingId === quizId}
+                                    variant="outline"
+                                    className="h-11 rounded-xl border-emerald-300 text-emerald-700"
+                                    aria-label="Lưu tên quiz"
+                                    data-testid={`rename-save-${quizId}`}
+                                  >
+                                    <Save className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    onClick={cancelRename}
+                                    variant="outline"
+                                    className="h-11 rounded-xl border-gray-300"
+                                    aria-label="Hủy sửa tên quiz"
+                                    data-testid={`rename-cancel-${quizId}`}
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                                {renameError && (
+                                  <p className="mt-2 text-xs font-bold text-red-600">{renameError}</p>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="flex items-start justify-between gap-3">
+                                <h3 className="text-xl font-black text-gray-900">
+                                  {quiz.title || "Quiz chưa đặt tên"}
+                                </h3>
+                                <button
+                                  type="button"
+                                  onClick={() => startRename(quiz)}
+                                  className="mt-0.5 rounded-lg border border-gray-200 bg-white p-2 text-gray-500 transition hover:border-blue-200 hover:text-blue-700"
+                                  aria-label="Sửa tên quiz"
+                                  data-testid={`rename-start-${quizId}`}
+                                >
+                                  <Edit3 className="h-4 w-4" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
                           <p className="min-h-[2.5rem] text-sm text-gray-600">
                             {quiz.description || "Không có mô tả"}
                           </p>
@@ -320,14 +489,62 @@ export default function QuizList() {
                               <p className="text-xs font-bold text-gray-500">Câu</p>
                             </div>
                             <div className="rounded-2xl bg-gray-50 p-3">
-                              <p className="text-lg font-black text-gray-900">{metrics.timeLimit}</p>
-                              <p className="text-xs font-bold text-gray-500">Phút</p>
+                              {isEditingTime ? (
+                                <div>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    max="180"
+                                    value={editingTimeLimit}
+                                    onChange={(event) => setEditingTimeLimit(event.target.value)}
+                                    onKeyDown={(event) => handleTimeKeyDown(event, quiz)}
+                                    autoFocus
+                                    data-testid={`time-input-${quizId}`}
+                                    className="h-8 w-full rounded-lg border border-blue-200 bg-white px-2 text-center text-sm font-black text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                                  />
+                                  <div className="mt-2 flex justify-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSaveTime(quiz)}
+                                      disabled={savingTimeId === quizId}
+                                      className="rounded-md bg-emerald-100 p-1 text-emerald-700 disabled:opacity-50"
+                                      aria-label="Lưu thời gian"
+                                      data-testid={`time-save-${quizId}`}
+                                    >
+                                      <Save className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={cancelEditTime}
+                                      className="rounded-md bg-gray-200 p-1 text-gray-600"
+                                      aria-label="Hủy sửa thời gian"
+                                      data-testid={`time-cancel-${quizId}`}
+                                    >
+                                      <X className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => startEditTime(quiz)}
+                                  className="w-full rounded-xl transition hover:bg-white"
+                                  aria-label="Sửa thời gian làm bài"
+                                  data-testid={`time-start-${quizId}`}
+                                >
+                                  <p className="text-lg font-black text-gray-900">{metrics.timeLimit}</p>
+                                  <p className="text-xs font-bold text-gray-500">Phút</p>
+                                </button>
+                              )}
                             </div>
                             <div className="rounded-2xl bg-gray-50 p-3">
                               <p className="text-lg font-black text-gray-900">{metrics.multipleChoiceCount}</p>
                               <p className="text-xs font-bold text-gray-500">Multi</p>
                             </div>
                           </div>
+                          {isEditingTime && timeEditError && (
+                            <p className="mt-2 text-center text-xs font-bold text-red-600">{timeEditError}</p>
+                          )}
                         </div>
                       </div>
 

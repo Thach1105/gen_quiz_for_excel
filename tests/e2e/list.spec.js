@@ -63,6 +63,26 @@ test.describe("Quiz List", () => {
         return;
       }
 
+      if (request.method() === "PUT") {
+        const payload = request.postDataJSON();
+        const id = url.split("/api/quiz/")[1];
+        const quiz = listQuizzes.find(item => item.id === id) || listQuizzes[0];
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            success: true,
+            data: {
+              ...quiz,
+              title: payload.title,
+              settings: payload.settings || quiz.settings,
+              updatedAt: "2026-05-03T08:00:00.000Z",
+            },
+          }),
+        });
+        return;
+      }
+
       await route.fallback();
     });
   });
@@ -81,5 +101,52 @@ test.describe("Quiz List", () => {
     await page.getByRole("button", { name: /Xem nhanh/i }).click();
     await expect(page.getByText("Xem nhanh nội dung")).toBeVisible();
     await expect(page.getByText("Single choice sample question?")).toBeVisible();
+  });
+
+  test("should rename quiz inline and allow canceling edits", async ({ page }) => {
+    let renamePayload;
+
+    await page.route("**/api/quiz/quiz-comma", async route => {
+      if (route.request().method() === "PUT") {
+        renamePayload = route.request().postDataJSON();
+      }
+      await route.fallback();
+    });
+
+    await page.goto("/quizzes");
+
+    await page.getByTestId("rename-start-quiz-comma").click();
+    await page.getByTestId("rename-input-quiz-comma").fill("Quiz đã đổi tên");
+    await page.getByTestId("rename-save-quiz-comma").click();
+
+    await expect.poll(() => renamePayload).toEqual({ title: "Quiz đã đổi tên" });
+    await expect(page.getByText("Quiz đã đổi tên")).toBeVisible();
+
+    await page.getByTestId("rename-start-quiz-comma").click();
+    await page.getByTestId("rename-input-quiz-comma").fill("Tên không lưu");
+    await page.getByTestId("rename-cancel-quiz-comma").click();
+
+    await expect(page.getByText("Tên không lưu")).toHaveCount(0);
+    await expect(page.getByText("Quiz đã đổi tên")).toBeVisible();
+  });
+
+  test("should update quiz time limit inline", async ({ page }) => {
+    let updatePayload;
+
+    await page.route("**/api/quiz/quiz-comma", async route => {
+      if (route.request().method() === "PUT") {
+        updatePayload = route.request().postDataJSON();
+      }
+      await route.fallback();
+    });
+
+    await page.goto("/quizzes");
+
+    await page.getByTestId("time-start-quiz-comma").click();
+    await page.getByTestId("time-input-quiz-comma").fill("40");
+    await page.getByTestId("time-save-quiz-comma").click();
+
+    await expect.poll(() => updatePayload?.settings?.timeLimit).toBe(40);
+    await expect(page.getByTestId("time-start-quiz-comma")).toContainText("40");
   });
 });

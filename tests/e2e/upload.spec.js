@@ -22,7 +22,7 @@ test.describe("Upload Functionality", () => {
     await expect(page.getByText("Correct A is the right answer for the single choice question.")).toBeVisible();
   });
 
-  test("should create quiz without mode in settings", async ({ page }) => {
+  test("should create quiz with custom title and without mode in settings", async ({ page }) => {
     let createPayload;
 
     await page.route("**/api/quiz", async route => {
@@ -48,12 +48,45 @@ test.describe("Upload Functionality", () => {
     });
 
     await page.locator("input[type='number']").fill("45");
+    await page.getByLabel("Tên quiz").fill("Quiz Dược lý custom");
     await page.getByRole("button", { name: /Tạo bài quiz/i }).click();
 
+    await expect.poll(() => createPayload?.title).toBe("Quiz Dược lý custom");
     await expect.poll(() => createPayload?.settings?.timeLimit).toBe(45);
     expect(createPayload.settings.shuffle).toBe(true);
     expect(createPayload.settings.mode).toBeUndefined();
     expect(createPayload.questions[0].explanation).toContain("single choice");
     expect(createPayload.questions[1].answer).toEqual(["Correct option, with comma", "Correct option 2"]);
+  });
+
+  test("should create automatic title from file name when title is empty", async ({ page }) => {
+    let createPayload;
+
+    await page.route("**/api/quiz", async route => {
+      if (route.request().method() === "POST") {
+        createPayload = route.request().postDataJSON();
+        await route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify({
+            success: true,
+            data: { id: "created-quiz", ...createPayload },
+          }),
+        });
+        return;
+      }
+      await route.fallback();
+    });
+
+    await page.locator("input[type='file']").setInputFiles({
+      name: "duoc-ly_nang-cao.xlsx",
+      mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      buffer: Buffer.from("mock xlsx"),
+    });
+
+    await page.getByRole("button", { name: /Tạo bài quiz/i }).click();
+
+    await expect.poll(() => createPayload?.title).toContain("duoc ly nang cao -");
+    expect(createPayload.title).toMatch(/\d{2}\/\d{2}\/\d{4}/);
   });
 });
