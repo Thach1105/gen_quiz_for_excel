@@ -422,7 +422,7 @@ export default function QuizTake() {
         </div>
       </aside>
 
-      <div className="relative z-10 mx-auto max-w-[1500px] px-4 py-6 sm:px-6 lg:pl-80 lg:pr-8">
+      <div className="relative z-10 max-w-none px-4 py-6 sm:px-6 lg:pl-72 lg:pr-8">
         <div className="sticky top-0 z-20 mb-6 rounded-[2rem] border border-gray-200 bg-white/90 p-4 shadow-lg backdrop-blur">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex flex-wrap items-center gap-3">
