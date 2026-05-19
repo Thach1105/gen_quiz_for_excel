@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { mockQuestions } from "./helpers.js";
+import { mockCategories, mockQuestions } from "./helpers.js";
 
 const listQuizzes = [
   {
@@ -12,6 +12,7 @@ const listQuizzes = [
       shuffle: true,
     },
     createdAt: "2026-05-01T08:00:00.000Z",
+    categoryId: "cat-tablet",
     updatedAt: "2026-05-02T08:00:00.000Z",
   },
   {
@@ -24,6 +25,7 @@ const listQuizzes = [
       shuffle: false,
     },
     createdAt: "2026-04-20T08:00:00.000Z",
+    categoryId: null,
     updatedAt: "2026-04-21T08:00:00.000Z",
   },
 ];
@@ -33,6 +35,28 @@ test.describe("Quiz List", () => {
     await page.route("**/api/quiz**", async route => {
       const request = route.request();
       const url = request.url();
+
+      if (request.method() === "GET" && url.includes("/api/quiz/categories")) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ success: true, data: mockCategories }),
+        });
+        return;
+      }
+
+      if (request.method() === "POST" && url.includes("/api/quiz/categories")) {
+        const payload = request.postDataJSON();
+        await route.fulfill({
+          status: 201,
+          contentType: "application/json",
+          body: JSON.stringify({
+            success: true,
+            data: { id: "cat-new", name: payload.name, parentId: payload.parentId || null },
+          }),
+        });
+        return;
+      }
 
       if (request.method() === "GET" && url.includes("/api/quiz?")) {
         await route.fulfill({
@@ -74,7 +98,8 @@ test.describe("Quiz List", () => {
             success: true,
             data: {
               ...quiz,
-              title: payload.title,
+              title: payload.title || quiz.title,
+              categoryId: Object.prototype.hasOwnProperty.call(payload, "categoryId") ? payload.categoryId : quiz.categoryId,
               settings: payload.settings || quiz.settings,
               updatedAt: "2026-05-03T08:00:00.000Z",
             },
@@ -91,12 +116,12 @@ test.describe("Quiz List", () => {
     await page.goto("/quizzes");
 
     await expect(page.getByText("Không gian quản lý quiz")).toBeVisible();
-    await expect(page.getByText("Quiz comma nâng cao")).toBeVisible();
-    await expect(page.getByText("Quiz cơ bản")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Quiz comma nâng cao" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Quiz cơ bản" })).toBeVisible();
 
-    await page.getByPlaceholder("Tìm theo tên, mô tả hoặc nội dung câu hỏi").fill("comma");
-    await expect(page.getByText("Quiz comma nâng cao")).toBeVisible();
-    await expect(page.getByText("Quiz cơ bản")).toHaveCount(0);
+    await page.getByPlaceholder("Tìm theo tên, mô tả, nhóm phân loại hoặc nội dung câu hỏi").fill("comma");
+    await expect(page.getByRole("heading", { name: "Quiz comma nâng cao" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Quiz cơ bản" })).toHaveCount(0);
 
     await page.getByRole("button", { name: /Xem nhanh/i }).click();
     await expect(page.getByText("Xem nhanh nội dung")).toBeVisible();
@@ -120,14 +145,14 @@ test.describe("Quiz List", () => {
     await page.getByTestId("rename-save-quiz-comma").click();
 
     await expect.poll(() => renamePayload).toEqual({ title: "Quiz đã đổi tên" });
-    await expect(page.getByText("Quiz đã đổi tên")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Quiz đã đổi tên" })).toBeVisible();
 
     await page.getByTestId("rename-start-quiz-comma").click();
     await page.getByTestId("rename-input-quiz-comma").fill("Tên không lưu");
     await page.getByTestId("rename-cancel-quiz-comma").click();
 
     await expect(page.getByText("Tên không lưu")).toHaveCount(0);
-    await expect(page.getByText("Quiz đã đổi tên")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Quiz đã đổi tên" })).toBeVisible();
   });
 
   test("should update quiz time limit inline", async ({ page }) => {
@@ -148,5 +173,41 @@ test.describe("Quiz List", () => {
 
     await expect.poll(() => updatePayload?.settings?.timeLimit).toBe(40);
     await expect(page.getByTestId("time-start-quiz-comma")).toContainText("40");
+  });
+
+  test("should show category tree, filter and update quiz category", async ({ page }) => {
+    let updatePayload;
+
+    await page.route("**/api/quiz/quiz-basic", async route => {
+      if (route.request().method() === "PUT") {
+        updatePayload = route.request().postDataJSON();
+      }
+      await route.fallback();
+    });
+
+    await page.goto("/quizzes");
+
+    await expect(page.getByText("Cây phân loại")).toBeVisible();
+    await expect(page.getByRole("button", { name: /Dược lý 0 quiz/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Viên nén 1 quiz/i })).toBeVisible();
+
+    await page.getByRole("button", { name: /Dược lý 0 quiz/i }).click();
+    await expect(page.getByRole("heading", { name: "Quiz comma nâng cao" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Quiz cơ bản" })).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Tất cả" }).click();
+    await page.getByTestId("quiz-category-select-quiz-basic").selectOption("cat-tablet");
+
+    await expect.poll(() => updatePayload?.categoryId).toBe("cat-tablet");
+  });
+
+  test("should create category from category tree panel", async ({ page }) => {
+    await page.goto("/quizzes");
+
+    await page.getByTestId("new-category-name").fill("Tá dược");
+    await page.getByTestId("new-category-parent").selectOption("cat-tablet");
+    await page.getByTestId("create-category-button").click();
+
+    await expect(page.getByRole("button", { name: /Tá dược 0 quiz/i })).toBeVisible();
   });
 });

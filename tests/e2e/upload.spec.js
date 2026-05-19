@@ -22,7 +22,7 @@ test.describe("Upload Functionality", () => {
     await expect(page.getByText("Correct A is the right answer for the single choice question.")).toBeVisible();
   });
 
-  test("should create quiz with custom title and without mode in settings", async ({ page }) => {
+  test("should create quiz with custom title, category and without mode in settings", async ({ page }) => {
     let createPayload;
 
     await page.route("**/api/quiz", async route => {
@@ -49,10 +49,12 @@ test.describe("Upload Functionality", () => {
 
     await page.locator("input[type='number']").fill("45");
     await page.getByLabel("Tên quiz").fill("Quiz Dược lý custom");
+    await page.getByLabel("Nhóm phân loại").selectOption("cat-tablet");
     await page.getByRole("button", { name: /Tạo bài quiz/i }).click();
 
     await expect.poll(() => createPayload?.title).toBe("Quiz Dược lý custom");
     await expect.poll(() => createPayload?.settings?.timeLimit).toBe(45);
+    expect(createPayload.categoryId).toBe("cat-tablet");
     expect(createPayload.settings.shuffle).toBe(true);
     expect(createPayload.settings.mode).toBeUndefined();
     expect(createPayload.questions[0].explanation).toContain("single choice");

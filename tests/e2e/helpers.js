@@ -45,7 +45,20 @@ export const mockFastTimerQuiz = {
   },
 };
 
+export const mockCategories = [
+  { id: "cat-pharma", name: "Dược lý", parentId: null },
+  { id: "cat-tablet", name: "Viên nén", parentId: "cat-pharma" },
+];
+
 export const mockQuizApi = async (page, quiz = mockQuiz) => {
+  await page.route("**/api/quiz/categories", async route => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ success: true, data: mockCategories }),
+    });
+  });
+
   await page.route("**/api/quiz/upload", async route => {
     await route.fulfill({
       status: 200,

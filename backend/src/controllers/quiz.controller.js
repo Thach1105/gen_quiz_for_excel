@@ -24,6 +24,43 @@ const generateQuizTitle = (questions) => {
   return `${keyword} - ${formatTitleTime()}`;
 };
 
+const normalizeCategoryName = (value) =>
+  String(value || "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const serializeCategory = (category) => ({
+  id: category._id,
+  ...category,
+  parentId: category.parentId?.toString?.() || null,
+});
+
+const serializeQuiz = (quiz) => ({
+  id: quiz._id,
+  ...quiz,
+  categoryId: quiz.categoryId?.toString?.() || null,
+});
+
+const resolveCategoryId = async (db, categoryId) => {
+  if (!categoryId) return null;
+
+  if (!ObjectId.isValid(categoryId)) {
+    const error = new Error("Invalid category ID");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const objectId = new ObjectId(categoryId);
+  const category = await db.collection("quizCategories").findOne({ _id: objectId });
+  if (!category) {
+    const error = new Error("Category not found");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return objectId;
+};
+
 /**
  * Upload and parse Excel file
  */
@@ -73,6 +110,9 @@ export const uploadExcelFile = async (req, res, next) => {
       },
     });
   } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
     next(error);
   }
 };
@@ -82,7 +122,7 @@ export const uploadExcelFile = async (req, res, next) => {
  */
 export const createQuiz = async (req, res, next) => {
   try {
-    const { title, description, questions, settings } = req.body;
+    const { title, description, questions, settings, categoryId } = req.body;
     
     logger.info("Creating new quiz", { 
       title: title || "Auto-generated",
@@ -103,12 +143,16 @@ export const createQuiz = async (req, res, next) => {
       });
     }
 
+    const db = getDB();
+    const resolvedCategoryId = await resolveCategoryId(db, categoryId);
+
     // Create quiz document
     const normalizedTitle = normalizeTitlePart(title);
     const quizData = {
       title: normalizedTitle || generateQuizTitle(questions),
       description: description || "",
       questions,
+      categoryId: resolvedCategoryId,
       settings: {
         timeLimit: settings?.timeLimit || 30,
         shuffle: settings?.shuffle ?? true,
@@ -118,7 +162,6 @@ export const createQuiz = async (req, res, next) => {
     };
 
     // Save to MongoDB
-    const db = getDB();
     const result = await db.collection("quizzes").insertOne(quizData);
     
     logger.info("Quiz created successfully", {
@@ -130,12 +173,12 @@ export const createQuiz = async (req, res, next) => {
 
     res.status(201).json({
       success: true,
-      data: {
-        id: result.insertedId,
-        ...quizData,
-      },
+      data: serializeQuiz({ _id: result.insertedId, ...quizData }),
     });
   } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
     next(error);
   }
 };
@@ -169,12 +212,12 @@ export const getQuizById = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      data: {
-        id: quiz._id,
-        ...quiz,
-      },
+      data: serializeQuiz(quiz),
     });
   } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
     next(error);
   }
 };
@@ -211,10 +254,7 @@ export const getAllQuizzes = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      data: quizzes.map(quiz => ({
-        id: quiz._id,
-        ...quiz,
-      })),
+      data: quizzes.map(serializeQuiz),
       pagination: {
         limit: parseInt(limit),
         offset: parseInt(offset),
@@ -222,6 +262,9 @@ export const getAllQuizzes = async (req, res, next) => {
       },
     });
   } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
     next(error);
   }
 };
@@ -262,6 +305,10 @@ export const updateQuiz = async (req, res, next) => {
       safeUpdates.title = normalizedTitle;
     }
 
+    if (Object.prototype.hasOwnProperty.call(safeUpdates, "categoryId")) {
+      safeUpdates.categoryId = await resolveCategoryId(db, safeUpdates.categoryId);
+    }
+
     await db.collection("quizzes").updateOne(
       { _id: new ObjectId(id) },
       { $set: { ...safeUpdates, updatedAt: new Date() } }
@@ -278,12 +325,12 @@ export const updateQuiz = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      data: {
-        id: updatedQuiz._id,
-        ...updatedQuiz,
-      },
+      data: serializeQuiz(updatedQuiz),
     });
   } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
     next(error);
   }
 };
@@ -291,6 +338,143 @@ export const updateQuiz = async (req, res, next) => {
 /**
  * Delete quiz
  */
+export const getAllCategories = async (req, res, next) => {
+  try {
+    const db = getDB();
+    const categories = await db.collection("quizCategories").find({}).sort({ name: 1 }).toArray();
+
+    res.status(200).json({
+      success: true,
+      data: categories.map(serializeCategory),
+    });
+  } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
+    next(error);
+  }
+};
+
+export const createCategory = async (req, res, next) => {
+  try {
+    const { name, parentId } = req.body;
+    const normalizedName = normalizeCategoryName(name);
+    if (!normalizedName) {
+      return res.status(400).json({ error: "Category name cannot be empty" });
+    }
+
+    const db = getDB();
+    const resolvedParentId = await resolveCategoryId(db, parentId);
+    const categoryData = {
+      name: normalizedName,
+      parentId: resolvedParentId,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const result = await db.collection("quizCategories").insertOne(categoryData);
+
+    res.status(201).json({
+      success: true,
+      data: serializeCategory({ _id: result.insertedId, ...categoryData }),
+    });
+  } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
+    next(error);
+  }
+};
+
+export const updateCategory = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "Invalid category ID" });
+    }
+
+    const db = getDB();
+    const categoryId = new ObjectId(id);
+    const category = await db.collection("quizCategories").findOne({ _id: categoryId });
+    if (!category) {
+      return res.status(404).json({ error: "Category not found" });
+    }
+
+    const safeUpdates = {};
+    if (Object.prototype.hasOwnProperty.call(updates, "name")) {
+      const normalizedName = normalizeCategoryName(updates.name);
+      if (!normalizedName) {
+        return res.status(400).json({ error: "Category name cannot be empty" });
+      }
+      safeUpdates.name = normalizedName;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updates, "parentId")) {
+      const resolvedParentId = await resolveCategoryId(db, updates.parentId);
+      if (resolvedParentId?.equals(categoryId)) {
+        return res.status(400).json({ error: "Category cannot be its own parent" });
+      }
+      safeUpdates.parentId = resolvedParentId;
+    }
+
+    await db.collection("quizCategories").updateOne(
+      { _id: categoryId },
+      { $set: { ...safeUpdates, updatedAt: new Date() } }
+    );
+
+    const updatedCategory = await db.collection("quizCategories").findOne({ _id: categoryId });
+
+    res.status(200).json({
+      success: true,
+      data: serializeCategory(updatedCategory),
+    });
+  } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
+    next(error);
+  }
+};
+
+export const deleteCategory = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "Invalid category ID" });
+    }
+
+    const db = getDB();
+    const categoryId = new ObjectId(id);
+    const category = await db.collection("quizCategories").findOne({ _id: categoryId });
+    if (!category) {
+      return res.status(404).json({ error: "Category not found" });
+    }
+
+    await db.collection("quizzes").updateMany(
+      { categoryId },
+      { $set: { categoryId: null, updatedAt: new Date() } }
+    );
+    await db.collection("quizCategories").updateMany(
+      { parentId: categoryId },
+      { $set: { parentId: null, updatedAt: new Date() } }
+    );
+    await db.collection("quizCategories").deleteOne({ _id: categoryId });
+
+    res.status(200).json({
+      success: true,
+      message: "Category deleted successfully",
+    });
+  } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
+    next(error);
+  }
+};
+
 export const deleteQuiz = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -323,6 +507,9 @@ export const deleteQuiz = async (req, res, next) => {
       message: "Quiz deleted successfully",
     });
   } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
     next(error);
   }
 };

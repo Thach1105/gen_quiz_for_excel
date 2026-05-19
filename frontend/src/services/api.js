@@ -133,3 +133,81 @@ export const deleteQuiz = async (id) => {
     throw error;
   }
 };
+
+export const getAllCategories = async () => {
+  try {
+    const response = await fetch(`${API_URL}/api/quiz/categories`);
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to get categories");
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Error getting categories:", error);
+    throw error;
+  }
+};
+
+export const createCategory = async (categoryData) => {
+  try {
+    const response = await fetch(`${API_URL}/api/quiz/categories`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(categoryData),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to create category");
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Error creating category:", error);
+    throw error;
+  }
+};
+
+export const updateCategory = async (id, updates) => {
+  try {
+    const response = await fetch(`${API_URL}/api/quiz/categories/${id}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(updates),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to update category");
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Error updating category:", error);
+    throw error;
+  }
+};
+
+export const deleteCategory = async (id) => {
+  try {
+    const response = await fetch(`${API_URL}/api/quiz/categories/${id}`, {
+      method: "DELETE",
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to delete category");
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Error deleting category:", error);
+    throw error;
+  }
+};

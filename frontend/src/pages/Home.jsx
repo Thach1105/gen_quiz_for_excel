@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Header from "@/components/Header";
 import HeroSection from "@/components/HeroSection";
@@ -6,7 +6,7 @@ import StepsSection from "@/components/StepsSection";
 import UploadSection from "@/components/UploadSection";
 import PreviewSection from "@/components/PreviewSection";
 import FooterSection from "@/components/FooterSection";
-import { createQuiz } from "@/services/api";
+import { createQuiz, getAllCategories } from "@/services/api";
 
 const normalizeKeyword = (value) =>
   String(value || "")
@@ -33,9 +33,25 @@ const generateQuizTitle = ({ fileName, questions }) => {
 export default function Home() {
   const navigate = useNavigate();
   const [questions, setQuestions] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const response = await getAllCategories();
+        if (response.success) {
+          setCategories(response.data);
+        }
+      } catch (err) {
+        setError(err.message || "Không thể tải nhóm phân loại");
+      }
+    };
+
+    fetchCategories();
+  }, []);
 
   const handleQuestionsLoaded = (loadedQuestions) => {
     setQuestions(loadedQuestions);
@@ -65,6 +81,7 @@ export default function Home() {
         }),
         description: "Quiz được tạo từ file Excel",
         questions,
+        categoryId: settings.categoryId || null,
         settings: {
           timeLimit: settings.timeLimit,
           shuffle: settings.shuffle,
@@ -115,7 +132,8 @@ export default function Home() {
 
         <HeroSection />
         <StepsSection />
-        <UploadSection 
+        <UploadSection
+          categories={categories}
           onQuestionsLoaded={handleQuestionsLoaded}
           onCreateQuiz={handleCreateQuiz}
         />

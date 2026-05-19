@@ -5,9 +5,29 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { uploadExcelFile } from "@/services/api";
 
-export default function UploadSection({ onQuestionsLoaded, onCreateQuiz }) {
+const getCategoryId = (category) => category.id || category._id;
+
+const buildCategoryOptions = (categories = []) => {
+  const categoryMap = new Map(categories.map(category => [getCategoryId(category), category]));
+  const getPath = (category) => {
+    const path = [category.name];
+    let parent = categoryMap.get(category.parentId);
+    while (parent) {
+      path.unshift(parent.name);
+      parent = categoryMap.get(parent.parentId);
+    }
+    return path.join(" > ");
+  };
+
+  return categories
+    .map(category => ({ id: getCategoryId(category), path: getPath(category) }))
+    .sort((a, b) => a.path.localeCompare(b.path, "vi"));
+};
+
+export default function UploadSection({ onQuestionsLoaded, onCreateQuiz, categories = [] }) {
   const [fileName, setFileName] = useState("");
   const [quizTitle, setQuizTitle] = useState("");
+  const [categoryId, setCategoryId] = useState("");
   const [shuffle, setShuffle] = useState(true);
   const [timeLimit, setTimeLimit] = useState(30);
   const [uploading, setUploading] = useState(false);
@@ -15,6 +35,7 @@ export default function UploadSection({ onQuestionsLoaded, onCreateQuiz }) {
   const fileInputRef = useRef(null);
 
   const progress = useMemo(() => (fileName ? 100 : 0), [fileName]);
+  const categoryOptions = useMemo(() => buildCategoryOptions(categories), [categories]);
 
   const handleFileSelect = async (event) => {
     const file = event.target.files?.[0];
@@ -66,6 +87,7 @@ export default function UploadSection({ onQuestionsLoaded, onCreateQuiz }) {
     onCreateQuiz({
       quizTitle,
       fileName,
+      categoryId,
       shuffle,
       timeLimit,
     });
@@ -161,6 +183,24 @@ export default function UploadSection({ onQuestionsLoaded, onCreateQuiz }) {
               <p className="mt-2 text-xs text-gray-500">
                 Nếu không nhập, tên sẽ được tạo từ tên file hoặc câu hỏi đầu tiên kèm thời gian.
               </p>
+            </div>
+
+            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+              <label htmlFor="quiz-category" className="mb-2 block text-sm font-semibold text-gray-900">
+                Nhóm phân loại
+              </label>
+              <select
+                id="quiz-category"
+                value={categoryId}
+                onChange={(event) => setCategoryId(event.target.value)}
+                className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm font-bold text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              >
+                <option value="">Chưa phân loại</option>
+                {categoryOptions.map(category => (
+                  <option key={category.id} value={category.id}>{category.path}</option>
+                ))}
+              </select>
+              <p className="mt-2 text-xs text-gray-500">Có thể đổi nhóm phân loại sau trong danh sách quiz.</p>
             </div>
 
             <div className="flex items-center justify-between rounded-2xl border border-gray-200 bg-gray-50 p-4">

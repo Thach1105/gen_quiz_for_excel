@@ -6,6 +6,10 @@ import {
   getAllQuizzes,
   updateQuiz,
   deleteQuiz,
+  getAllCategories,
+  createCategory,
+  updateCategory,
+  deleteCategory,
 } from "../controllers/quiz.controller.js";
 import { uploadExcel } from "../middleware/upload.middleware.js";
 
@@ -31,6 +35,11 @@ router.post("/", createQuiz);
  * @access  Public
  */
 router.get("/", getAllQuizzes);
+
+router.get("/categories", getAllCategories);
+router.post("/categories", createCategory);
+router.put("/categories/:id", updateCategory);
+router.delete("/categories/:id", deleteCategory);
 
 /**
  * @route   GET /api/quiz/:id
