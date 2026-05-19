@@ -181,10 +181,21 @@ export default function QuizTake() {
     }
   };
 
+  const scrollToQuestion = (index) => {
+    const targetQuestion = quiz.questions[index];
+    if (!targetQuestion) return;
+
+    setCurrentQuestion(index);
+    document.getElementById(`question-${targetQuestion.id}`)?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  };
+
   const handleJumpToNextUnanswered = () => {
     const nextIndex = quiz.questions.findIndex(item => !hasAnswered(item.id));
     if (nextIndex >= 0) {
-      setCurrentQuestion(nextIndex);
+      scrollToQuestion(nextIndex);
     }
   };
 
@@ -377,52 +388,114 @@ export default function QuizTake() {
     );
   }
 
-  const question = quiz.questions[currentQuestion];
-  const isMultiple = isMultipleChoice(question.type);
-  const isRevealed = Boolean(revealedQuestions[question.id]);
-  const questionAnswered = hasAnswered(question.id);
-  const correctAnswers = getCorrectAnswers(question);
-  const currentAnswerCorrect = isAnswerCorrect(question, answers[question.id]);
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-      <div className="relative z-10 mx-auto max-w-6xl px-6 py-8">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <Button
-              onClick={() => navigate("/quizzes")}
-              variant="outline"
-              className="rounded-2xl border-gray-300"
-            >
-              Thoát
-            </Button>
-            <div>
-              <p className="text-sm text-gray-600">Câu {currentQuestion + 1} / {quiz.questions.length}</p>
-              <div className="mt-1 h-2 w-48 rounded-full bg-gray-200">
-                <div
-                  className="h-full rounded-full bg-blue-600 transition-all"
-                  style={{ width: `${((currentQuestion + 1) / quiz.questions.length) * 100}%` }}
-                />
+      <aside className="fixed left-3 top-24 z-30 hidden max-h-[calc(100vh-7rem)] w-20 overflow-y-auto rounded-3xl border border-gray-200 bg-white/95 p-2 shadow-xl backdrop-blur lg:block">
+        <div className="mb-2 h-2 overflow-hidden rounded-full bg-gray-100">
+          <div
+            className="h-full rounded-full bg-blue-600 transition-all"
+            style={{ width: `${progressPercent}%` }}
+          />
+        </div>
+        <div className="grid grid-cols-1 gap-2">
+          {quiz.questions.map((item, idx) => {
+            const status = getQuestionStatus(item.id, idx);
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => scrollToQuestion(idx)}
+                className={getNavButtonClass(status)}
+                data-testid={`question-nav-${item.id}`}
+                data-status={status}
+                aria-label={`Câu ${item.id}`}
+                title={`Câu ${item.id}`}
+              >
+                {item.id}
+              </button>
+            );
+          })}
+        </div>
+      </aside>
+
+      <div className="relative z-10 mx-auto max-w-[1500px] px-4 py-6 sm:px-6 lg:pl-28 lg:pr-8">
+        <div className="sticky top-0 z-20 mb-6 rounded-[2rem] border border-gray-200 bg-white/90 p-4 shadow-lg backdrop-blur">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                onClick={() => navigate("/quizzes")}
+                variant="outline"
+                className="rounded-2xl border-gray-300"
+              >
+                Thoát
+              </Button>
+              <div>
+                <p className="text-sm font-bold text-gray-700">{answeredCount}/{quiz.questions.length} câu đã làm</p>
+                <div className="mt-1 h-2 w-48 rounded-full bg-gray-200">
+                  <div
+                    className="h-full rounded-full bg-blue-600 transition-all"
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
               </div>
             </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-2xl border-2 border-gray-200 bg-white px-4 py-2 text-sm font-bold text-gray-700">
-              {selectedMode === "exam" ? "Kiểm tra" : "Luyện tập"}
-            </span>
-            <div className="flex items-center gap-2 rounded-2xl border-2 border-gray-200 bg-white px-4 py-2">
-              {timerEnabled ? (
-                <>
-                  <Clock className="h-5 w-5 text-gray-600" />
-                  <span className="font-bold text-gray-900" data-testid="timer-display">{formatTime(timeLeft)}</span>
-                </>
-              ) : (
-                <>
-                  <Infinity className="h-5 w-5 text-gray-600" />
-                  <span className="font-bold text-gray-900" data-testid="timer-display">Không giới hạn</span>
-                </>
-              )}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-2xl border-2 border-gray-200 bg-white px-4 py-2 text-sm font-bold text-gray-700">
+                {selectedMode === "exam" ? "Kiểm tra" : "Luyện tập"}
+              </span>
+              <span className="rounded-2xl border border-gray-200 bg-white px-4 py-2 text-sm font-bold text-gray-700">
+                Cần xem lại: {flaggedCount}
+              </span>
+              <Button
+                type="button"
+                onClick={handleJumpToNextUnanswered}
+                disabled={unansweredCount === 0}
+                variant="outline"
+                className="rounded-2xl border-gray-300 text-sm font-bold disabled:opacity-50"
+              >
+                <Target className="mr-2 h-4 w-4" />
+                Câu chưa làm tiếp theo
+              </Button>
+              <div className="flex items-center gap-2 rounded-2xl border-2 border-gray-200 bg-white px-4 py-2">
+                {timerEnabled ? (
+                  <>
+                    <Clock className="h-5 w-5 text-gray-600" />
+                    <span className="font-bold text-gray-900" data-testid="timer-display">{formatTime(timeLeft)}</span>
+                  </>
+                ) : (
+                  <>
+                    <Infinity className="h-5 w-5 text-gray-600" />
+                    <span className="font-bold text-gray-900" data-testid="timer-display">Không giới hạn</span>
+                  </>
+                )}
+              </div>
+              <Button
+                onClick={() => handleSubmit()}
+                data-testid="submit-quiz"
+                className="rounded-2xl bg-emerald-600 font-bold text-white hover:bg-emerald-700"
+              >
+                Nộp bài
+              </Button>
             </div>
+          </div>
+
+          <div className="mt-4 flex gap-2 overflow-x-auto pb-1 lg:hidden">
+            {quiz.questions.map((item, idx) => {
+              const status = getQuestionStatus(item.id, idx);
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => scrollToQuestion(idx)}
+                  className={`${getNavButtonClass(status)} shrink-0`}
+                  data-testid={`question-nav-${item.id}`}
+                  data-status={status}
+                  aria-label={`Câu ${item.id}`}
+                >
+                  {item.id}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -448,246 +521,151 @@ export default function QuizTake() {
           </div>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[1fr_16rem]">
-          <Card className="rounded-[2rem] border-2 border-gray-200 bg-white shadow-xl">
-            <CardContent className="p-8">
-              <motion.div
-                key={currentQuestion}
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.3 }}
-              >
-                <div className="mb-6">
-                  <div className="mb-3 flex flex-wrap items-center gap-2">
-                    <div className="inline-flex items-center gap-2 rounded-full bg-blue-100 px-4 py-2">
-                      <span className="text-sm font-bold text-blue-700">Câu {question.id}</span>
-                    </div>
-                    <div className={`inline-flex items-center gap-2 rounded-full px-4 py-2 ${
-                      isMultiple ? "bg-purple-100" : "bg-emerald-100"
-                    }`}>
-                      <span className={`text-xs font-bold ${
-                        isMultiple ? "text-purple-700" : "text-emerald-700"
-                      }`}>
-                        {isMultiple ? "Chọn nhiều đáp án" : "Chọn 1 đáp án"}
-                      </span>
-                    </div>
-                    {isRevealed && (
-                      <span className="rounded-full bg-amber-100 px-4 py-2 text-xs font-bold text-amber-700">
-                        Đã xem đáp án
-                      </span>
-                    )}
-                    {flaggedQuestions[question.id] && (
-                      <span className="rounded-full bg-rose-100 px-4 py-2 text-xs font-bold text-rose-700">
-                        Cần xem lại
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                    <h2 className="whitespace-pre-line text-2xl font-bold text-gray-900">{question.question}</h2>
-                    <Button
-                      type="button"
-                      onClick={() => handleToggleFlag(question.id)}
-                      variant="outline"
-                      className={`shrink-0 rounded-2xl border-gray-300 ${
-                        flaggedQuestions[question.id] ? "border-rose-300 bg-rose-50 text-rose-700" : "bg-white"
-                      }`}
-                    >
-                      <Flag className="mr-2 h-4 w-4" />
-                      {flaggedQuestions[question.id] ? "Bỏ đánh dấu" : "Xem lại"}
-                    </Button>
-                  </div>
-                </div>
+        <div className="space-y-6">
+          {quiz.questions.map((question, idx) => {
+            const isMultiple = isMultipleChoice(question.type);
+            const isRevealed = Boolean(revealedQuestions[question.id]);
+            const questionAnswered = hasAnswered(question.id);
+            const correctAnswers = getCorrectAnswers(question);
+            const currentAnswerCorrect = isAnswerCorrect(question, answers[question.id]);
 
-                <div className="space-y-3">
-                  {question.options && question.options.map((option, idx) => {
-                    const isSelected = isOptionSelected(question.id, option, isMultiple);
-                    const isLocked = selectedMode === "practice" && isRevealed;
-                    return (
-                      <button
-                        key={idx}
-                        type="button"
-                        disabled={isLocked}
-                        data-testid={`option-${question.id}-${idx}`}
-                        data-selected={isSelected ? "true" : "false"}
-                        data-correct={correctAnswers.includes(option) ? "true" : "false"}
-                        onClick={() => handleAnswer(question.id, option, isMultiple)}
-                        className={`w-full rounded-2xl border-2 p-4 text-left transition disabled:cursor-not-allowed ${getOptionClass(
-                          option,
-                          isSelected,
-                          isRevealed,
-                          correctAnswers
-                        )}`}
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="whitespace-pre-line font-medium">{option}</span>
-                          {isMultiple ? (
-                            isSelected ? (
-                              <CheckSquare className="h-5 w-5 flex-shrink-0 text-blue-600" />
-                            ) : (
-                              <Square className="h-5 w-5 flex-shrink-0 text-gray-400" />
-                            )
-                          ) : (
-                            isSelected && <CheckCircle className="h-5 w-5 flex-shrink-0 text-blue-600" />
-                          )}
+            return (
+              <motion.section
+                key={question.id}
+                id={`question-${question.id}`}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25, delay: Math.min(idx * 0.03, 0.2) }}
+                className="scroll-mt-32"
+                onFocus={() => setCurrentQuestion(idx)}
+              >
+                <Card className="rounded-[2rem] border-2 border-gray-200 bg-white shadow-xl">
+                  <CardContent className="p-6 lg:p-8">
+                    <div className="mb-6 border-b border-gray-100 pb-5">
+                      <div className="mb-3 flex flex-wrap items-center gap-2">
+                        <div className="inline-flex items-center gap-2 rounded-full bg-blue-100 px-4 py-2">
+                          <span className="text-sm font-bold text-blue-700">Câu {question.id}</span>
                         </div>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {selectedMode === "practice" && (
-                  <div className="mt-5">
-                    <Button
-                      onClick={() => handleRevealAnswer(question.id)}
-                      disabled={!questionAnswered || isRevealed}
-                      variant="outline"
-                      data-testid="show-answer-button"
-                      className="rounded-2xl border-gray-300 bg-white"
-                    >
-                      <Eye className="mr-2 h-5 w-5" />
-                      {isRevealed ? "Đã hiển thị đáp án" : "Xem đáp án đúng"}
-                    </Button>
-                  </div>
-                )}
-
-                {selectedMode === "practice" && isRevealed && (
-                  <div
-                    className={`mt-5 rounded-2xl border-2 p-4 ${
-                      currentAnswerCorrect ? "border-emerald-200 bg-emerald-50" : "border-red-200 bg-red-50"
-                    }`}
-                    data-testid="practice-feedback"
-                  >
-                    <div className="mb-2 flex items-center gap-2">
-                      {currentAnswerCorrect ? (
-                        <CheckCircle className="h-5 w-5 text-emerald-600" />
-                      ) : (
-                        <XCircle className="h-5 w-5 text-red-600" />
-                      )}
-                      <span className={`font-bold ${currentAnswerCorrect ? "text-emerald-700" : "text-red-700"}`}>
-                        {currentAnswerCorrect ? "Bạn đã chọn đúng" : "Bạn chưa chọn đúng"}
-                      </span>
-                    </div>
-                    <p className="text-sm text-gray-700">
-                      Đáp án đúng: <span className="whitespace-pre-line font-bold text-emerald-700">{formatCorrectAnswer(question)}</span>
-                    </p>
-                    {question.explanation && (
-                      <p className="mt-2 text-sm text-gray-700">
-                        Giải thích: <span className="whitespace-pre-line font-medium">{question.explanation}</span>
-                      </p>
-                    )}
-                  </div>
-                )}
-              </motion.div>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-[2rem] border-2 border-gray-200 bg-white shadow-xl">
-            <CardContent className="p-5">
-              <div className="mb-4">
-                <h3 className="text-sm font-black uppercase tracking-wide text-gray-700">Bảng câu hỏi</h3>
-                <div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-100">
-                  <div
-                    className="h-full rounded-full bg-blue-600 transition-all"
-                    style={{ width: `${progressPercent}%` }}
-                  />
-                </div>
-                <div className="mt-2 flex justify-between text-xs font-bold text-gray-500">
-                  <span>{answeredCount} đã làm</span>
-                  <span>{unansweredCount} còn lại</span>
-                </div>
-              </div>
-
-              <Button
-                type="button"
-                onClick={handleJumpToNextUnanswered}
-                disabled={unansweredCount === 0}
-                variant="outline"
-                className="mb-4 h-10 w-full rounded-2xl border-gray-300 text-sm font-bold disabled:opacity-50"
-              >
-                <Target className="mr-2 h-4 w-4" />
-                Câu chưa làm tiếp theo
-              </Button>
-
-              <div className="grid grid-cols-5 gap-2 lg:grid-cols-4">
-                {quiz.questions.map((item, idx) => {
-                  const status = getQuestionStatus(item.id, idx);
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => setCurrentQuestion(idx)}
-                      className={getNavButtonClass(status)}
-                      data-testid={`question-nav-${item.id}`}
-                      data-status={status}
-                      aria-label={`Câu ${item.id}`}
-                    >
-                      {item.id}
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="mt-4 space-y-2 text-xs text-gray-600">
-                <div><span className="mr-2 inline-block h-3 w-3 rounded bg-gray-200" />Chưa làm</div>
-                <div><span className="mr-2 inline-block h-3 w-3 rounded bg-emerald-100" />Đã làm</div>
-                <div><span className="mr-2 inline-block h-3 w-3 rounded bg-blue-600" />Câu hiện tại</div>
-                <div><span className="mr-2 inline-block h-3 w-3 rounded bg-rose-100" />Cần xem lại</div>
-                {selectedMode === "practice" && (
-                  <div><span className="mr-2 inline-block h-3 w-3 rounded bg-amber-100" />Đã xem đáp án</div>
-                )}
-              </div>
-
-              {flaggedCount > 0 && (
-                <div className="mt-5 rounded-2xl border border-rose-100 bg-rose-50 p-3">
-                  <p className="mb-2 text-xs font-black uppercase text-rose-700">Danh sách xem lại</p>
-                  <div className="flex flex-wrap gap-2">
-                    {quiz.questions.filter(item => flaggedQuestions[item.id]).map(item => {
-                      const index = quiz.questions.findIndex(questionItem => questionItem.id === item.id);
-                      return (
-                        <button
-                          key={item.id}
+                        <div className={`inline-flex items-center gap-2 rounded-full px-4 py-2 ${
+                          isMultiple ? "bg-purple-100" : "bg-emerald-100"
+                        }`}>
+                          <span className={`text-xs font-bold ${
+                            isMultiple ? "text-purple-700" : "text-emerald-700"
+                          }`}>
+                            {isMultiple ? "Chọn nhiều đáp án" : "Chọn 1 đáp án"}
+                          </span>
+                        </div>
+                        {isRevealed && (
+                          <span className="rounded-full bg-amber-100 px-4 py-2 text-xs font-bold text-amber-700">
+                            Đã xem đáp án
+                          </span>
+                        )}
+                        {flaggedQuestions[question.id] && (
+                          <span className="rounded-full bg-rose-100 px-4 py-2 text-xs font-bold text-rose-700">
+                            Cần xem lại
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                        <h2 className="whitespace-pre-line text-2xl font-bold leading-relaxed text-gray-900">{question.question}</h2>
+                        <Button
                           type="button"
-                          onClick={() => setCurrentQuestion(index)}
-                          className="h-8 min-w-8 rounded-lg bg-white px-2 text-xs font-black text-rose-700 shadow-sm"
+                          onClick={() => handleToggleFlag(question.id)}
+                          variant="outline"
+                          className={`shrink-0 rounded-2xl border-gray-300 ${
+                            flaggedQuestions[question.id] ? "border-rose-300 bg-rose-50 text-rose-700" : "bg-white"
+                          }`}
                         >
-                          {item.id}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+                          <Flag className="mr-2 h-4 w-4" />
+                          {flaggedQuestions[question.id] ? "Bỏ đánh dấu" : "Xem lại"}
+                        </Button>
+                      </div>
+                    </div>
 
-        <div className="mt-6 flex items-center justify-between gap-3">
-          <Button
-            onClick={handlePrev}
-            disabled={currentQuestion === 0}
-            variant="outline"
-            className="rounded-2xl border-gray-300 disabled:opacity-50"
-          >
-            <ChevronLeft className="mr-2 h-5 w-5" />
-            Câu trước
-          </Button>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {question.options && question.options.map((option, optionIndex) => {
+                        const isSelected = isOptionSelected(question.id, option, isMultiple);
+                        const isLocked = selectedMode === "practice" && isRevealed;
+                        return (
+                          <button
+                            key={optionIndex}
+                            type="button"
+                            disabled={isLocked}
+                            data-testid={`option-${question.id}-${optionIndex}`}
+                            data-selected={isSelected ? "true" : "false"}
+                            data-correct={correctAnswers.includes(option) ? "true" : "false"}
+                            onClick={() => handleAnswer(question.id, option, isMultiple)}
+                            className={`w-full rounded-2xl border-2 p-4 text-left transition disabled:cursor-not-allowed ${getOptionClass(
+                              option,
+                              isSelected,
+                              isRevealed,
+                              correctAnswers
+                            )}`}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="whitespace-pre-line font-medium">{option}</span>
+                              {isMultiple ? (
+                                isSelected ? (
+                                  <CheckSquare className="h-5 w-5 flex-shrink-0 text-blue-600" />
+                                ) : (
+                                  <Square className="h-5 w-5 flex-shrink-0 text-gray-400" />
+                                )
+                              ) : (
+                                isSelected && <CheckCircle className="h-5 w-5 flex-shrink-0 text-blue-600" />
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
 
-          {currentQuestion === quiz.questions.length - 1 ? (
-            <Button
-              onClick={() => handleSubmit()}
-              data-testid="submit-quiz"
-              className="rounded-2xl bg-emerald-600 font-bold text-white hover:bg-emerald-700"
-            >
-              Nộp bài
-            </Button>
-          ) : (
-            <Button
-              onClick={handleNext}
-              className="rounded-2xl bg-blue-600 text-white hover:bg-blue-700"
-            >
-              Câu tiếp theo
-              <ChevronRight className="ml-2 h-5 w-5" />
-            </Button>
-          )}
+                    {selectedMode === "practice" && (
+                      <div className="mt-5">
+                        <Button
+                          onClick={() => handleRevealAnswer(question.id)}
+                          disabled={!questionAnswered || isRevealed}
+                          variant="outline"
+                          data-testid="show-answer-button"
+                          className="rounded-2xl border-gray-300 bg-white"
+                        >
+                          <Eye className="mr-2 h-5 w-5" />
+                          {isRevealed ? "Đã hiển thị đáp án" : "Xem đáp án đúng"}
+                        </Button>
+                      </div>
+                    )}
+
+                    {selectedMode === "practice" && isRevealed && (
+                      <div
+                        className={`mt-5 rounded-2xl border-2 p-4 ${
+                          currentAnswerCorrect ? "border-emerald-200 bg-emerald-50" : "border-red-200 bg-red-50"
+                        }`}
+                        data-testid="practice-feedback"
+                      >
+                        <div className="mb-2 flex items-center gap-2">
+                          {currentAnswerCorrect ? (
+                            <CheckCircle className="h-5 w-5 text-emerald-600" />
+                          ) : (
+                            <XCircle className="h-5 w-5 text-red-600" />
+                          )}
+                          <span className={`font-bold ${currentAnswerCorrect ? "text-emerald-700" : "text-red-700"}`}>
+                            {currentAnswerCorrect ? "Bạn đã chọn đúng" : "Bạn chưa chọn đúng"}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-700">
+                          Đáp án đúng: <span className="whitespace-pre-line font-bold text-emerald-700">{formatCorrectAnswer(question)}</span>
+                        </p>
+                        {question.explanation && (
+                          <p className="mt-2 text-sm text-gray-700">
+                            Giải thích: <span className="whitespace-pre-line font-medium">{question.explanation}</span>
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </motion.section>
+            );
+          })}
         </div>
       </div>
     </div>

@@ -10,19 +10,19 @@ test.describe("Quiz Taking Flow", () => {
     await page.getByRole("button", { name: /Bắt đầu làm bài/i }).click();
 
     await expect(page.getByText("Single choice sample question?")).toBeVisible();
+    await expect(page.getByText("Multiple choice sample question with comma option?")).toBeVisible();
+    await expect(page.getByText("Last question for navigation?")).toBeVisible();
     await expect(page.getByText("Đáp án đúng:")).toHaveCount(0);
 
     await page.getByTestId("option-1-0").click();
-    await expect(page.getByTestId("question-nav-1")).toHaveAttribute("data-status", "current");
+    await expect(page.getByTestId("question-nav-1").first()).toHaveAttribute("data-status", "current");
 
-    await page.getByRole("button", { name: /Câu tiếp theo/i }).click();
     await page.getByTestId("option-2-0").click();
     await page.getByTestId("option-2-1").click();
     await expect(page.getByTestId("option-2-0")).toHaveAttribute("data-selected", "true");
     await expect(page.getByTestId("option-2-1")).toHaveAttribute("data-selected", "true");
     await expect(page.getByTestId("option-2-0")).toHaveAttribute("data-correct", "true");
 
-    await page.getByRole("button", { name: /Câu tiếp theo/i }).click();
     await page.getByTestId("option-3-2").click();
     await page.getByTestId("submit-quiz").click();
 
@@ -43,21 +43,21 @@ test.describe("Quiz Taking Flow", () => {
     await page.getByRole("button", { name: /Bắt đầu làm bài/i }).click();
 
     await page.getByTestId("option-1-1").click();
-    await page.getByTestId("show-answer-button").click();
+    await page.locator("#question-1").getByTestId("show-answer-button").click();
 
-    await expect(page.getByTestId("practice-feedback")).toBeVisible();
+    await expect(page.locator("#question-1").getByTestId("practice-feedback")).toBeVisible();
     await expect(page.getByText("Bạn chưa chọn đúng")).toBeVisible();
     await expect(page.getByText("Correct A is the right answer for the single choice question.")).toBeVisible();
     await expect(page.getByTestId("option-1-0")).toBeDisabled();
-    await expect(page.getByTestId("question-nav-1")).toHaveAttribute("data-status", "current");
+    await expect(page.getByTestId("question-nav-1").first()).toHaveAttribute("data-status", "current");
 
-    await page.getByTestId("question-nav-2").click();
+    await page.getByTestId("question-nav-2").first().click();
     await expect(page.getByText("Multiple choice sample question with comma option?")).toBeVisible();
     await page.getByTestId("option-2-0").click();
     await page.getByTestId("option-2-1").click();
     await expect(page.getByTestId("option-2-0")).toHaveAttribute("data-selected", "true");
     await expect(page.getByTestId("option-2-1")).toHaveAttribute("data-selected", "true");
-    await page.getByTestId("show-answer-button").click();
+    await page.locator("#question-2").getByTestId("show-answer-button").click();
     await expect(page.getByText("Correct option, with comma; Correct option 2")).toBeVisible();
     await expect(page.getByText("The first two options are correct, including one option that contains a comma.")).toBeVisible();
   });
@@ -68,12 +68,12 @@ test.describe("Quiz Taking Flow", () => {
 
     await page.getByRole("button", { name: /Bắt đầu làm bài/i }).click();
     await page.getByTestId("option-1-0").click();
-    await page.getByTestId("question-nav-2").click();
+    await page.getByTestId("question-nav-2").first().click();
 
     await expect(page.getByText("Multiple choice sample question with comma option?")).toBeVisible();
-    await expect(page.getByTestId("question-nav-1")).toHaveAttribute("data-status", "answered");
-    await expect(page.getByTestId("question-nav-2")).toHaveAttribute("data-status", "current");
-    await expect(page.getByTestId("question-nav-3")).toHaveAttribute("data-status", "unanswered");
+    await expect(page.getByTestId("question-nav-1").first()).toHaveAttribute("data-status", "answered");
+    await expect(page.getByTestId("question-nav-2").first()).toHaveAttribute("data-status", "current");
+    await expect(page.getByTestId("question-nav-3").first()).toHaveAttribute("data-status", "unanswered");
   });
 
   test("timer should auto submit when time is over", async ({ page }) => {
