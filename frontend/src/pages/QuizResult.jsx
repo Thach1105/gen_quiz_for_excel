@@ -19,9 +19,11 @@ import {
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { formatAnswer, formatCorrectAnswer, isAnswerCorrect } from "@/utils/questionType";
+import { formatAnswer, formatCorrectAnswer, getCorrectAnswers, isAnswerCorrect, splitAnswerText } from "@/utils/questionType";
 
 const hasUserAnswer = (answer) => (Array.isArray(answer) ? answer.length > 0 : Boolean(answer));
+const isAnswerSelected = (answer, option) => splitAnswerText(answer).includes(option);
+const isCorrectOption = (question, option) => getCorrectAnswers(question).includes(option);
 
 export default function QuizResult() {
   const { id } = useParams();
@@ -349,19 +351,46 @@ export default function QuizResult() {
 
                       {expandedQuestions.has(question.id) && (
                         <div className="mt-4 border-t border-white/70 pt-4" data-testid={`result-question-detail-${question.id}`}>
-                          <div className="mb-3 whitespace-pre-line rounded-xl bg-white/80 p-3 text-sm text-gray-800">
-                            {question.question}
+                          <div className="mb-3 grid gap-2 sm:grid-cols-2">
+                            {(question.options || []).map((option, optionIndex) => {
+                              const selected = isAnswerSelected(userAnswer, option);
+                              const optionCorrect = isCorrectOption(question, option);
+                              return (
+                                <div
+                                  key={`${question.id}-${optionIndex}`}
+                                  className={`rounded-xl border p-3 text-sm ${
+                                    optionCorrect
+                                      ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                                      : selected
+                                        ? "border-red-300 bg-red-50 text-red-800"
+                                        : "border-gray-200 bg-white/80 text-gray-800"
+                                  }`}
+                                >
+                                  <div className="flex items-start justify-between gap-3">
+                                    <span className="whitespace-pre-line font-medium">{option}</span>
+                                    <span className="flex shrink-0 gap-1">
+                                      {selected && (
+                                        <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-bold text-blue-700">Bạn chọn</span>
+                                      )}
+                                      {optionCorrect && (
+                                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-700">Đúng</span>
+                                      )}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
                           <div className="space-y-2 text-sm">
                             <div>
                               <span className="text-gray-600">Câu trả lời của bạn: </span>
-                              <span className={`font-bold ${correct ? "text-emerald-700" : "text-red-700"}`}>
+                              <span className={`whitespace-pre-line font-bold ${correct ? "text-emerald-700" : "text-red-700"}`}>
                                 {formatAnswer(userAnswer) || "(Chưa trả lời)"}
                               </span>
                             </div>
                             <div>
                               <span className="text-gray-600">Đáp án đúng: </span>
-                              <span className="font-bold text-emerald-700">{formatCorrectAnswer(question)}</span>
+                              <span className="whitespace-pre-line font-bold text-emerald-700">{formatCorrectAnswer(question)}</span>
                             </div>
                             {question.explanation && (
                               <div className="rounded-xl border border-gray-200 bg-white/70 p-3">
