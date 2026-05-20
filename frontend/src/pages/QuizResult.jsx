@@ -19,11 +19,28 @@ import {
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { formatAnswer, formatCorrectAnswer, getCorrectAnswers, isAnswerCorrect, splitAnswerText } from "@/utils/questionType";
+import {
+  formatCorrectAnswer,
+  formatUserAnswer,
+  getCorrectAnswers,
+  getNormalizedOptions,
+  getOptionImage,
+  getOptionText,
+  getQuestionImage,
+  isAnswerCorrect,
+  isAnswerSelectedValue,
+  isCorrectOptionById,
+  normalizeUserAnswer,
+} from "@/utils/questionType";
 
 const hasUserAnswer = (answer) => (Array.isArray(answer) ? answer.length > 0 : Boolean(answer));
-const isAnswerSelected = (answer, option) => splitAnswerText(answer).includes(option);
-const isCorrectOption = (question, option) => getCorrectAnswers(question).includes(option);
+const isAnswerSelected = (question, answer, option, index) => isAnswerSelectedValue(question, answer, option, index);
+const isCorrectOption = (question, option, index) => isCorrectOptionById(question, option, index);
+
+const getDisplayedUserAnswer = (question, answer) => formatUserAnswer(question, answer);
+const getDisplayedQuestionImage = (question) => getQuestionImage(question);
+const getDisplayedOptions = (question) => getNormalizedOptions(question.options || []);
+const getNormalizedAnswerForScore = (question, answer) => normalizeUserAnswer(question, answer);
 
 export default function QuizResult() {
   const { id } = useParams();
@@ -47,7 +64,8 @@ export default function QuizResult() {
 
     return quiz.questions.map((question, idx) => {
       const userAnswer = answers[question.id];
-      const answered = hasUserAnswer(userAnswer);
+      const normalizedUserAnswer = getNormalizedAnswerForScore(question, userAnswer);
+      const answered = hasUserAnswer(normalizedUserAnswer);
       const correct = answered && isAnswerCorrect(question, userAnswer);
       return {
         question,
@@ -351,13 +369,20 @@ export default function QuizResult() {
 
                       {expandedQuestions.has(question.id) && (
                         <div className="mt-4 border-t border-white/70 pt-4" data-testid={`result-question-detail-${question.id}`}>
+                          {getDisplayedQuestionImage(question)?.url && (
+                            <div className="mb-4 overflow-hidden rounded-2xl border border-gray-200 bg-white/80 p-2">
+                              <img src={getDisplayedQuestionImage(question).url} alt={`Question ${question.id}`} className="max-h-72 rounded-xl object-contain" />
+                            </div>
+                          )}
                           <div className="mb-3 grid gap-2 sm:grid-cols-2">
-                            {(question.options || []).map((option, optionIndex) => {
-                              const selected = isAnswerSelected(userAnswer, option);
-                              const optionCorrect = isCorrectOption(question, option);
+                            {getDisplayedOptions(question).map((option, optionIndex) => {
+                              const optionText = getOptionText(option.raw);
+                              const optionImage = getOptionImage(option.raw);
+                              const selected = isAnswerSelected(question, userAnswer, option.raw, optionIndex);
+                              const optionCorrect = isCorrectOption(question, option.raw, optionIndex);
                               return (
                                 <div
-                                  key={`${question.id}-${optionIndex}`}
+                                  key={`${question.id}-${option.id}`}
                                   className={`rounded-xl border p-3 text-sm ${
                                     optionCorrect
                                       ? "border-emerald-300 bg-emerald-50 text-emerald-800"
@@ -367,7 +392,14 @@ export default function QuizResult() {
                                   }`}
                                 >
                                   <div className="flex items-start justify-between gap-3">
-                                    <span className="whitespace-pre-line font-medium">{option}</span>
+                                    <div className="min-w-0 flex-1 space-y-3">
+                                      <span className="block whitespace-pre-line font-medium">{optionText}</span>
+                                      {optionImage?.url && (
+                                        <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white p-2">
+                                          <img src={optionImage.url} alt={`Option ${optionIndex + 1}`} className="max-h-32 rounded-xl object-contain" />
+                                        </div>
+                                      )}
+                                    </div>
                                     <span className="flex shrink-0 gap-1">
                                       {selected && (
                                         <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-bold text-blue-700">Bạn chọn</span>
@@ -385,7 +417,7 @@ export default function QuizResult() {
                             <div>
                               <span className="text-gray-600">Câu trả lời của bạn: </span>
                               <span className={`whitespace-pre-line font-bold ${correct ? "text-emerald-700" : "text-red-700"}`}>
-                                {formatAnswer(userAnswer) || "(Chưa trả lời)"}
+                                {getDisplayedUserAnswer(question, userAnswer) || "(Chưa trả lời)"}
                               </span>
                             </div>
                             <div>

@@ -1,6 +1,6 @@
 ﻿import { ObjectId } from "mongodb";
-import { parseExcelFile, detectColumnMapping, transformToQuizFormat, validateQuizData } from "../services/excel.service.js";
-import { extractQuestionsFromDocument } from "../services/gemini.service.js";
+import { parseExcelFile, detectColumnMapping, transformToQuizFormat, validateQuizData, normalizeQuestionForStorage } from "../services/excel.service.js";
+import { extractQuestionsFromDocument } from "../services/ai.service.js";
 import { getDB } from "../services/mongodb.service.js";
 import { uploadFile } from "../services/cloudinary.service.js";
 import logger from "../services/logger.service.js";
@@ -168,11 +168,14 @@ const enrichQuizSearchFields = (quiz, categoryPathMap) => ({
 
 const buildQuizDocument = ({ title, description, questions, categoryId, settings }) => {
   const normalizedTitle = normalizeTitlePart(title);
+  const normalizedQuestions = Array.isArray(questions)
+    ? questions.map((question, index) => normalizeQuestionForStorage(question, index))
+    : [];
 
   return {
-    title: normalizedTitle || generateQuizTitle(questions),
+    title: normalizedTitle || generateQuizTitle(normalizedQuestions),
     description: description || "",
-    questions,
+    questions: normalizedQuestions,
     categoryId,
     settings: {
       timeLimit: Number.parseInt(settings?.timeLimit, 10) || 30,
@@ -261,7 +264,15 @@ export const createQuiz = async (req, res, next) => {
       return res.status(400).json({ error: "No questions provided" });
     }
 
-    const validation = validateQuizData(questions);
+    const quizData = buildQuizDocument({
+      title,
+      description,
+      questions,
+      categoryId: null,
+      settings,
+    });
+
+    const validation = validateQuizData(quizData.questions);
     if (!validation.valid) {
       return res.status(400).json({
         error: "Invalid quiz data",
@@ -271,13 +282,7 @@ export const createQuiz = async (req, res, next) => {
 
     const db = getDB();
     const resolvedCategoryId = await resolveCategoryId(db, categoryId);
-    const quizData = buildQuizDocument({
-      title,
-      description,
-      questions,
-      categoryId: resolvedCategoryId,
-      settings,
-    });
+    quizData.categoryId = resolvedCategoryId;
 
     const quiz = await insertQuiz(db, quizData);
 
@@ -322,7 +327,8 @@ export const extractQuizFromDocument = async (req, res, next) => {
       return res.status(400).json({ error: "No questions extracted from document" });
     }
 
-    const validation = validateQuizData(questions);
+    const normalizedQuestions = questions.map((question, index) => normalizeQuestionForStorage(question, index));
+    const validation = validateQuizData(normalizedQuestions);
     if (!validation.valid) {
       return res.status(400).json({
         error: "Invalid quiz data",
@@ -332,14 +338,14 @@ export const extractQuizFromDocument = async (req, res, next) => {
 
     logger.info("Document quiz extracted successfully", {
       fileName: req.file.originalname,
-      questionCount: questions.length,
+      questionCount: normalizedQuestions.length,
       requestId: req.requestId,
     });
 
     res.status(200).json({
       success: true,
       data: {
-        questions,
+        questions: normalizedQuestions,
         validation,
         fileName: req.file.originalname,
       },
@@ -473,26 +479,24 @@ export const updateQuiz = async (req, res, next) => {
   try {
     const { id } = req.params;
     const updates = req.body;
-    
-    logger.info("Updating quiz", { 
-      quizId: id, 
+
+    logger.info("Updating quiz", {
+      quizId: id,
       updates: Object.keys(updates),
-      requestId: req.requestId 
+      requestId: req.requestId,
     });
 
     if (!ObjectId.isValid(id)) {
       return res.status(400).json({ error: "Invalid quiz ID" });
     }
 
-    // Check if quiz exists
     const db = getDB();
     const quiz = await db.collection("quizzes").findOne({ _id: new ObjectId(id) });
-    
+
     if (!quiz) {
       return res.status(404).json({ error: "Quiz not found" });
     }
 
-    // Update quiz
     const safeUpdates = { ...updates };
     if (Object.prototype.hasOwnProperty.call(safeUpdates, "title")) {
       const normalizedTitle = normalizeTitlePart(safeUpdates.title);
@@ -506,18 +510,31 @@ export const updateQuiz = async (req, res, next) => {
       safeUpdates.categoryId = await resolveCategoryId(db, safeUpdates.categoryId);
     }
 
+    if (Object.prototype.hasOwnProperty.call(safeUpdates, "questions")) {
+      const normalizedQuestions = Array.isArray(safeUpdates.questions)
+        ? safeUpdates.questions.map((question, index) => normalizeQuestionForStorage(question, index))
+        : [];
+      const validation = validateQuizData(normalizedQuestions);
+      if (!validation.valid) {
+        return res.status(400).json({
+          error: "Invalid quiz data",
+          details: validation.errors,
+        });
+      }
+      safeUpdates.questions = normalizedQuestions;
+    }
+
     await db.collection("quizzes").updateOne(
       { _id: new ObjectId(id) },
       { $set: { ...safeUpdates, updatedAt: new Date() } }
     );
 
-    // Get updated quiz
     const updatedQuiz = await db.collection("quizzes").findOne({ _id: new ObjectId(id) });
-    
-    logger.info("Quiz updated successfully", { 
+
+    logger.info("Quiz updated successfully", {
       quizId: id,
       title: updatedQuiz.title,
-      requestId: req.requestId 
+      requestId: req.requestId,
     });
 
     res.status(200).json({
@@ -535,6 +552,29 @@ export const updateQuiz = async (req, res, next) => {
 /**
  * Delete quiz
  */
+export const uploadQuizImage = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+
+    const uploaded = await uploadFile(req.file.buffer, req.file.originalname);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        url: uploaded.secure_url,
+        publicId: uploaded.public_id,
+        width: uploaded.width || null,
+        height: uploaded.height || null,
+        format: uploaded.format || null,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getAllCategories = async (req, res, next) => {
   try {
     const db = getDB();
