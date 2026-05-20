@@ -31,25 +31,25 @@ const columnMatches = (column, patterns) =>
 
 const isQuestionTypeText = (value) =>
   normalizedCandidates(value).some(candidate =>
-    /\bsingle\b/.test(candidate) ||
-    /\bmultiple\b/.test(candidate) ||
-    /\bmulti(?:\s+choice)?\b/.test(candidate) ||
-    /\bcheckbox(?:es)?\b/.test(candidate) ||
-    /\bchon\s+nhieu\b/.test(candidate) ||
-    /\bnhieu(?:\s+(?:dap\s+an|lua\s+chon))?\b/.test(candidate)
+    /^single\s+choice$/.test(candidate) ||
+    /^multiple\s+choice$/.test(candidate)
   );
 
 const isMultipleChoiceText = (value) =>
   normalizedCandidates(value).some(candidate =>
-    /\bmultiple\b/.test(candidate) ||
-    /\bmulti(?:\s+choice)?\b/.test(candidate) ||
-    /\bcheckbox(?:es)?\b/.test(candidate) ||
-    /\bchon\s+nhieu\b/.test(candidate) ||
-    /\bnhieu(?:\s+(?:dap\s+an|lua\s+chon))?\b/.test(candidate)
+    /^multiple\s+choice$/.test(candidate)
   );
 
-const normalizeQuestionType = (value) =>
-  isMultipleChoiceText(value) ? "Multiple choice" : "Single choice";
+const isSingleChoiceText = (value) =>
+  normalizedCandidates(value).some(candidate =>
+    /^single\s+choice$/.test(candidate)
+  );
+
+const normalizeQuestionType = (value) => {
+  if (isMultipleChoiceText(value)) return "Multiple choice";
+  if (isSingleChoiceText(value)) return "Single choice";
+  return String(value ?? "").trim();
+};
 
 const readCell = (row, columnName, fallback = "") => {
   if (!columnName) return fallback;
@@ -245,6 +245,68 @@ export const transformToQuizFormat = (data, mapping) => {
   }
 };
 
+const normalizeImagePayload = (image) => {
+  if (!image) return null;
+  if (typeof image === "string") {
+    const url = image.trim();
+    return url ? { url, publicId: "" } : null;
+  }
+
+  const url = String(image.url || "").trim();
+  const publicId = String(image.publicId || "").trim();
+  if (!url) return null;
+
+  return { url, publicId };
+};
+
+const normalizeOptionValue = (option, index) => {
+  if (typeof option === "string") {
+    return {
+      id: `option-${index + 1}`,
+      text: option.trim(),
+      image: null,
+    };
+  }
+
+  return {
+    id: String(option?.id || `option-${index + 1}`).trim(),
+    text: String(option?.text || "").trim(),
+    image: normalizeImagePayload(option?.image),
+  };
+};
+
+export const normalizeQuestionForStorage = (question, index) => {
+  const options = Array.isArray(question?.options)
+    ? question.options.map((option, optionIndex) => normalizeOptionValue(option, optionIndex))
+    : [];
+
+  const validOptions = options.filter(option => option.text);
+  const answerValues = Array.isArray(question?.answer)
+    ? question.answer.map(answer => String(answer || "").trim()).filter(Boolean)
+    : [];
+
+  const optionIdsByText = new Map(validOptions.map(option => [option.text, option.id]));
+  const answerOptionIds = Array.isArray(question?.answerOptionIds)
+    ? question.answerOptionIds.map(id => String(id || "").trim()).filter(Boolean)
+    : answerValues.map(answer => optionIdsByText.get(answer)).filter(Boolean);
+
+  const resolvedAnswers = answerValues.length > 0
+    ? answerValues.filter(answer => optionIdsByText.has(answer))
+    : validOptions.filter(option => answerOptionIds.includes(option.id)).map(option => option.text);
+
+  return {
+    ...question,
+    id: question?.id ?? index + 1,
+    question: String(question?.question || "").trim(),
+    options: validOptions,
+    answer: [...new Set(resolvedAnswers)],
+    answerOptionIds: [...new Set(answerOptionIds.filter(id => validOptions.some(option => option.id === id)))],
+    type: normalizeQuestionType(question?.type),
+    explanation: String(question?.explanation || "").trim(),
+    questionImage: normalizeImagePayload(question?.questionImage),
+  };
+};
+
 export const validateQuizData = (questions) => {
   const errors = [];
   const warnings = [];
@@ -254,26 +316,56 @@ export const validateQuizData = (questions) => {
     return { valid: false, errors, warnings };
   }
 
-  questions.forEach((q, index) => {
-    if (!q.question || String(q.question).trim() === "") {
+  questions.forEach((rawQuestion, index) => {
+    const q = normalizeQuestionForStorage(rawQuestion, index);
+    const optionTexts = q.options.map(option => option.text).filter(Boolean);
+    const normalizedOptionTexts = optionTexts.map(text => text.trim().toLowerCase());
+    const uniqueOptionTexts = new Set(normalizedOptionTexts);
+
+    if (!q.question) {
       errors.push(`Question ${index + 1}: Missing question text`);
     }
 
-    if (!q.options || q.options.length < 2) {
+    if (q.options.length < 2) {
       errors.push(`Question ${index + 1}: Need at least 2 options`);
     }
 
-    if (!q.answer || (Array.isArray(q.answer) ? q.answer.length === 0 : String(q.answer).trim() === "")) {
-      warnings.push(`Question ${index + 1}: Missing correct answer`);
+    if (!["Single choice", "Multiple choice"].includes(q.type)) {
+      errors.push(`Question ${index + 1}: Invalid question type`);
     }
 
-    if (q.options) {
-      q.options.forEach((opt, optIdx) => {
-        if (isQuestionTypeText(opt)) {
-          errors.push(`Question ${index + 1}, Option ${optIdx + 1}: Contains question type instead of answer`);
-        }
-      });
+    if (!q.answer || q.answer.length === 0) {
+      errors.push(`Question ${index + 1}: Missing correct answer`);
     }
+
+    if (q.type === "Single choice" && q.answer.length !== 1) {
+      errors.push(`Question ${index + 1}: Single choice question must have exactly 1 correct answer`);
+    }
+
+    if (uniqueOptionTexts.size !== normalizedOptionTexts.length) {
+      errors.push(`Question ${index + 1}: Duplicate option texts found`);
+    }
+
+    q.options.forEach((opt, optIdx) => {
+      if (!opt.text) {
+        errors.push(`Question ${index + 1}, Option ${optIdx + 1}: Missing option text`);
+      }
+      if (isQuestionTypeText(opt.text)) {
+        errors.push(`Question ${index + 1}, Option ${optIdx + 1}: Contains question type instead of answer`);
+      }
+    });
+
+    q.answer.forEach((answerValue) => {
+      if (!q.options.some(option => option.text === answerValue)) {
+        errors.push(`Question ${index + 1}: Correct answer must match an option`);
+      }
+    });
+
+    q.answerOptionIds.forEach((answerOptionId) => {
+      if (!q.options.some(option => option.id === answerOptionId)) {
+        errors.push(`Question ${index + 1}: Correct answer option is invalid`);
+      }
+    });
   });
 
   return {

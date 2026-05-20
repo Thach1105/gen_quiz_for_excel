@@ -36,5 +36,17 @@ const uploadDocumentMulter = multer({
   },
 });
 
+const uploadImageMulter = multer({
+  storage,
+  fileFilter: createExtensionFilter(
+    [".png", ".jpg", ".jpeg", ".gif", ".webp"],
+    "Invalid file type. Only image files (.png, .jpg, .jpeg, .gif, .webp) are allowed.",
+  ),
+  limits: {
+    fileSize: 10 * 1024 * 1024,
+  },
+});
+
 export const uploadExcel = uploadExcelMulter.single("file");
 export const uploadDocument = uploadDocumentMulter.single("file");
+export const uploadImage = uploadImageMulter.single("file");

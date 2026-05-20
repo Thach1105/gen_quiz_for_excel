@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { CheckCircle2, ChevronDown, ChevronUp, Download, FileQuestion } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { getCorrectAnswers, getQuestionTypeLabel } from "@/utils/questionType";
+import { getCorrectAnswers, getNormalizedOptions, getQuestionTypeLabel } from "@/utils/questionType";
 
 export default function PreviewSection({ questions = [] }) {
   const [expandedQuestions, setExpandedQuestions] = useState(new Set());
@@ -152,18 +152,18 @@ export default function PreviewSection({ questions = [] }) {
 
                           <p className="mb-3 text-sm font-semibold text-gray-700">Đáp án:</p>
                           <div className={`grid gap-2 ${getGridCols(item.options?.length || 0)}`}>
-                            {item.options && item.options.map((option, optIdx) => {
-                              const isCorrect = getCorrectAnswers(item).includes(option);
+                            {getNormalizedOptions(item.options || []).map((option, optIdx) => {
+                              const isCorrect = getCorrectAnswers(item).includes(option.text);
                               return (
                                 <div
-                                  key={optIdx}
+                                  key={option.id || optIdx}
                                   className={`flex items-center justify-between rounded-xl border-2 p-3 text-sm ${
                                     isCorrect
                                       ? "border-emerald-300 bg-emerald-50 text-emerald-800"
                                       : "border-gray-200 bg-gray-50 text-gray-700"
                                   }`}
                                 >
-                                  <span className="whitespace-pre-line">{option}</span>
+                                  <span className="whitespace-pre-line">{option.text}</span>
                                   {isCorrect && <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-emerald-600" />}
                                 </div>
                               );

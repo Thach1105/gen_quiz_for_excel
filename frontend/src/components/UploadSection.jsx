@@ -27,6 +27,7 @@ const buildCategoryOptions = (categories = []) => {
 const FILE_MODES = {
   excel: {
     label: "Excel",
+    tabIcon: "/icon-excel.png",
     accept: ".xlsx,.xls,.csv",
     validTypes: [".xlsx", ".xls", ".csv"],
     emptyError: "Vui lòng upload file Excel trước",
@@ -37,6 +38,7 @@ const FILE_MODES = {
   },
   document: {
     label: "PDF",
+    tabIcon: "/icon-pdf.png",
     accept: ".pdf",
     validTypes: [".pdf"],
     emptyError: "Vui lòng upload file PDF trước",
@@ -167,12 +169,13 @@ export default function UploadSection({
                 key={key}
                 type="button"
                 onClick={() => handleModeChange(key)}
-                className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition ${
                   mode === key
                     ? "bg-white text-blue-600 shadow-sm"
                     : "text-gray-600 hover:text-gray-900"
                 }`}
               >
+                <img src={config.tabIcon} alt="" className="h-4 w-4 object-contain" aria-hidden="true" />
                 {config.label}
               </button>
             ))}

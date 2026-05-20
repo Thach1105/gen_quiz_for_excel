@@ -138,6 +138,28 @@ export const updateQuiz = async (id, updates) => {
   }
 };
 
+export const uploadQuizImage = async (file) => {
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const response = await fetch(`${API_URL}/api/quiz/upload-image`, {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to upload image");
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Error uploading quiz image:", error);
+    throw error;
+  }
+};
+
 /**
  * Delete quiz
  */

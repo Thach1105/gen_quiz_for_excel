@@ -7,12 +7,13 @@ import {
   getAllQuizzes,
   updateQuiz,
   deleteQuiz,
+  uploadQuizImage,
   getAllCategories,
   createCategory,
   updateCategory,
   deleteCategory,
 } from "../controllers/quiz.controller.js";
-import { uploadDocument, uploadExcel } from "../middleware/upload.middleware.js";
+import { uploadDocument, uploadExcel, uploadImage } from "../middleware/upload.middleware.js";
 
 const router = express.Router();
 
@@ -29,6 +30,13 @@ router.post("/upload", uploadExcel, uploadExcelFile);
  * @access  Public
  */
 router.post("/extract-from-document", uploadDocument, extractQuizFromDocument);
+
+/**
+ * @route   POST /api/quiz/upload-image
+ * @desc    Upload quiz image to Cloudinary
+ * @access  Public
+ */
+router.post("/upload-image", uploadImage, uploadQuizImage);
 
 /**
  * @route   POST /api/quiz

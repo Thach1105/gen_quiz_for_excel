@@ -18,7 +18,17 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getQuizById } from "@/services/api";
-import { formatCorrectAnswer, isAnswerCorrect, isMultipleChoice, getCorrectAnswers } from "@/utils/questionType";
+import {
+  formatCorrectAnswer,
+  getAnswerSelectionKey,
+  getCorrectAnswers,
+  getNormalizedOptions,
+  getOptionImage,
+  getOptionText,
+  getQuestionImage,
+  isAnswerCorrect,
+  isMultipleChoice,
+} from "@/utils/questionType";
 
 const DEFAULT_TIME_LIMIT_MINUTES = 30;
 
@@ -130,15 +140,18 @@ export default function QuizTake() {
     });
   };
 
-  const handleAnswer = (questionId, option, isMultiple) => {
+  const handleAnswer = (question, option, optionIndex, isMultiple) => {
+    const questionId = question.id;
     if (selectedMode === "practice" && revealedQuestions[questionId]) return;
+
+    const optionValue = getOptionValue(question, option, optionIndex);
 
     if (isMultiple) {
       setAnswers(prev => {
         const currentArray = Array.isArray(prev[questionId]) ? prev[questionId] : [];
-        const nextAnswer = currentArray.includes(option)
-          ? currentArray.filter(o => o !== option)
-          : [...currentArray, option];
+        const nextAnswer = currentArray.includes(optionValue)
+          ? currentArray.filter(value => value !== optionValue)
+          : [...currentArray, optionValue];
 
         return {
           ...prev,
@@ -150,7 +163,7 @@ export default function QuizTake() {
 
     setAnswers(prev => ({
       ...prev,
-      [questionId]: option,
+      [questionId]: optionValue,
     }));
   };
 
@@ -211,10 +224,19 @@ export default function QuizTake() {
     return Array.isArray(answer) ? answer.length > 0 : Boolean(answer);
   };
 
-  const isOptionSelected = (questionId, option, isMultiple) => {
-    const answer = answers[questionId];
-    return isMultiple ? Array.isArray(answer) && answer.includes(option) : answer === option;
+  const isOptionSelected = (question, option, optionIndex, isMultiple) => {
+    const answer = answers[question.id];
+    const selectionKey = getAnswerSelectionKey(question, option, optionIndex);
+    return isMultiple
+      ? Array.isArray(answer) && answer.includes(selectionKey)
+      : answer === selectionKey;
   };
+
+  const getOptionValue = (question, option, optionIndex) => getAnswerSelectionKey(question, option, optionIndex);
+
+  const getDisplayCorrectAnswers = (question) => getCorrectAnswers(question);
+
+  const getQuestionOptions = (question) => getNormalizedOptions(question.options || []);
 
   const getQuestionStatus = (questionId, index) => {
     if (index === currentQuestion) return "current";
@@ -530,8 +552,10 @@ export default function QuizTake() {
             const isMultiple = isMultipleChoice(question.type);
             const isRevealed = Boolean(revealedQuestions[question.id]);
             const questionAnswered = hasAnswered(question.id);
-            const correctAnswers = getCorrectAnswers(question);
+            const correctAnswers = getDisplayCorrectAnswers(question);
             const currentAnswerCorrect = isAnswerCorrect(question, answers[question.id]);
+            const questionImage = getQuestionImage(question);
+            const normalizedOptions = getQuestionOptions(question);
 
             return (
               <motion.section
@@ -584,30 +608,44 @@ export default function QuizTake() {
                           {flaggedQuestions[question.id] ? "Bỏ đánh dấu" : "Xem lại"}
                         </Button>
                       </div>
+                      {questionImage?.url && (
+                        <div className="mt-4 overflow-hidden rounded-3xl border border-gray-200 bg-gray-50 p-3">
+                          <img src={questionImage.url} alt={`Question ${question.id}`} className="max-h-72 rounded-2xl object-contain" />
+                        </div>
+                      )}
                     </div>
 
                     <div className="grid gap-3 md:grid-cols-2">
-                      {question.options && question.options.map((option, optionIndex) => {
-                        const isSelected = isOptionSelected(question.id, option, isMultiple);
+                      {normalizedOptions.map((option, optionIndex) => {
+                        const optionText = getOptionText(option.raw);
+                        const optionImage = getOptionImage(option.raw);
+                        const isSelected = isOptionSelected(question, option.raw, optionIndex, isMultiple);
                         const isLocked = selectedMode === "practice" && isRevealed;
                         return (
                           <button
-                            key={optionIndex}
+                            key={option.id}
                             type="button"
                             disabled={isLocked}
                             data-testid={`option-${question.id}-${optionIndex}`}
                             data-selected={isSelected ? "true" : "false"}
-                            data-correct={correctAnswers.includes(option) ? "true" : "false"}
-                            onClick={() => handleAnswer(question.id, option, isMultiple)}
+                            data-correct={correctAnswers.includes(optionText) ? "true" : "false"}
+                            onClick={() => handleAnswer(question, option.raw, optionIndex, isMultiple)}
                             className={`w-full rounded-2xl border-2 p-4 text-left transition disabled:cursor-not-allowed ${getOptionClass(
-                              option,
+                              optionText,
                               isSelected,
                               isRevealed,
                               correctAnswers
                             )}`}
                           >
-                            <div className="flex items-center justify-between gap-3">
-                              <span className="whitespace-pre-line font-medium">{option}</span>
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0 flex-1 space-y-3">
+                                <span className="block whitespace-pre-line font-medium">{optionText}</span>
+                                {optionImage?.url && (
+                                  <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white p-2">
+                                    <img src={optionImage.url} alt={`Option ${optionIndex + 1}`} className="max-h-40 rounded-xl object-contain" />
+                                  </div>
+                                )}
+                              </div>
                               {isMultiple ? (
                                 isSelected ? (
                                   <CheckSquare className="h-5 w-5 flex-shrink-0 text-blue-600" />

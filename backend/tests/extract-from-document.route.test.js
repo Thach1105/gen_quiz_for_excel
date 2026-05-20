@@ -7,8 +7,8 @@ const { mockExtractQuestionsFromDocument, mockGetDB } = vi.hoisted(() => ({
   mockGetDB: vi.fn(),
 }));
 
-vi.mock("../src/services/gemini.service.js", async () => {
-  const actual = await vi.importActual("../src/services/gemini.service.js");
+vi.mock("../src/services/ai.service.js", async () => {
+  const actual = await vi.importActual("../src/services/ai.service.js");
   return {
     ...actual,
     extractQuestionsFromDocument: mockExtractQuestionsFromDocument,
@@ -91,7 +91,23 @@ describe("POST /api/quiz/extract-from-document", () => {
     expect(response.status).toBe(200);
     expect(response.body.success).toBe(true);
     expect(response.body.data.fileName).toBe("sample.pdf");
-    expect(response.body.data.questions).toEqual(questions);
+    expect(response.body.data.questions).toEqual([
+      {
+        id: 1,
+        question: "Thủ đô của Việt Nam là gì?",
+        options: [
+          { id: "option-1", text: "Hà Nội", image: null },
+          { id: "option-2", text: "Huế", image: null },
+          { id: "option-3", text: "Đà Nẵng", image: null },
+          { id: "option-4", text: "Cần Thơ", image: null },
+        ],
+        answer: ["Hà Nội"],
+        answerOptionIds: ["option-1"],
+        type: "Single choice",
+        explanation: "Hà Nội là thủ đô.",
+        questionImage: null,
+      },
+    ]);
     expect(response.body.data.validation.valid).toBe(true);
   });
 
@@ -133,5 +149,77 @@ describe("POST /api/quiz/extract-from-document", () => {
     expect(response.status).toBe(400);
     expect(response.body.error).toBe("Invalid quiz data");
     expect(Array.isArray(response.body.details)).toBe(true);
+  });
+
+  it("returns 400 when extracted quiz has duplicate options", async () => {
+    mockExtractQuestionsFromDocument.mockResolvedValue([
+      {
+        id: 1,
+        question: "Câu trùng đáp án",
+        options: ["Giống nhau", "Giống nhau", "Khác nhau"],
+        answer: ["Giống nhau"],
+        type: "Single choice",
+        explanation: "",
+      },
+    ]);
+
+    const response = await request(app)
+      .post("/api/quiz/extract-from-document")
+      .attach("file", Buffer.from("fake-pdf"), {
+        filename: "sample.pdf",
+        contentType: "application/pdf",
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe("Invalid quiz data");
+    expect(response.body.details).toContain("Question 1: Duplicate option texts found");
+  });
+
+  it("returns 400 when single choice question has multiple correct answers", async () => {
+    mockExtractQuestionsFromDocument.mockResolvedValue([
+      {
+        id: 1,
+        question: "Câu một đáp án nhưng có nhiều đáp án đúng",
+        options: ["A", "B", "C"],
+        answer: ["A", "B"],
+        type: "Single choice",
+        explanation: "",
+      },
+    ]);
+
+    const response = await request(app)
+      .post("/api/quiz/extract-from-document")
+      .attach("file", Buffer.from("fake-pdf"), {
+        filename: "sample.pdf",
+        contentType: "application/pdf",
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe("Invalid quiz data");
+    expect(response.body.details).toContain("Question 1: Single choice question must have exactly 1 correct answer");
+  });
+
+  it("returns 400 when extracted quiz misses correct answer", async () => {
+    mockExtractQuestionsFromDocument.mockResolvedValue([
+      {
+        id: 1,
+        question: "Câu thiếu đáp án đúng",
+        options: ["A", "B", "C"],
+        answer: [],
+        type: "Single choice",
+        explanation: "",
+      },
+    ]);
+
+    const response = await request(app)
+      .post("/api/quiz/extract-from-document")
+      .attach("file", Buffer.from("fake-pdf"), {
+        filename: "sample.pdf",
+        contentType: "application/pdf",
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe("Invalid quiz data");
+    expect(response.body.details).toContain("Question 1: Missing correct answer");
   });
 });
