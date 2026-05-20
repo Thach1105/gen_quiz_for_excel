@@ -18,7 +18,7 @@ test.describe("Home Page", () => {
 
   test("should display empty preview before upload", async ({ page }) => {
     await expect(page.getByText("Chưa có câu hỏi")).toBeVisible();
-    await expect(page.getByText("Upload file Excel để xem preview câu hỏi")).toBeVisible();
+    await expect(page.getByText("Upload file Excel hoặc PDF để xem preview câu hỏi")).toBeVisible();
   });
 
   test("should keep time and shuffle controls usable", async ({ page }) => {

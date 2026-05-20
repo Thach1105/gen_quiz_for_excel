@@ -1,5 +1,6 @@
 ﻿import { ObjectId } from "mongodb";
 import { parseExcelFile, detectColumnMapping, transformToQuizFormat, validateQuizData } from "../services/excel.service.js";
+import { extractQuestionsFromDocument } from "../services/gemini.service.js";
 import { getDB } from "../services/mongodb.service.js";
 import { uploadFile } from "../services/cloudinary.service.js";
 import logger from "../services/logger.service.js";
@@ -165,6 +166,28 @@ const enrichQuizSearchFields = (quiz, categoryPathMap) => ({
   normalizedCategoryPath: normalizeSearchText(categoryPathMap.get(quiz.categoryId?.toString?.()) || ""),
 });
 
+const buildQuizDocument = ({ title, description, questions, categoryId, settings }) => {
+  const normalizedTitle = normalizeTitlePart(title);
+
+  return {
+    title: normalizedTitle || generateQuizTitle(questions),
+    description: description || "",
+    questions,
+    categoryId,
+    settings: {
+      timeLimit: Number.parseInt(settings?.timeLimit, 10) || 30,
+      shuffle: settings?.shuffle ?? true,
+    },
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+};
+
+const insertQuiz = async (db, quizData) => {
+  const result = await db.collection("quizzes").insertOne(quizData);
+  return { _id: result.insertedId, ...quizData };
+};
+
 /**
  * Upload and parse Excel file
  */
@@ -227,18 +250,17 @@ export const uploadExcelFile = async (req, res, next) => {
 export const createQuiz = async (req, res, next) => {
   try {
     const { title, description, questions, settings, categoryId } = req.body;
-    
-    logger.info("Creating new quiz", { 
+
+    logger.info("Creating new quiz", {
       title: title || "Auto-generated",
       questionCount: questions?.length || 0,
-      requestId: req.requestId 
+      requestId: req.requestId,
     });
 
     if (!questions || questions.length === 0) {
       return res.status(400).json({ error: "No questions provided" });
     }
 
-    // Validate quiz data
     const validation = validateQuizData(questions);
     if (!validation.valid) {
       return res.status(400).json({
@@ -249,35 +271,78 @@ export const createQuiz = async (req, res, next) => {
 
     const db = getDB();
     const resolvedCategoryId = await resolveCategoryId(db, categoryId);
-
-    // Create quiz document
-    const normalizedTitle = normalizeTitlePart(title);
-    const quizData = {
-      title: normalizedTitle || generateQuizTitle(questions),
-      description: description || "",
+    const quizData = buildQuizDocument({
+      title,
+      description,
       questions,
       categoryId: resolvedCategoryId,
-      settings: {
-        timeLimit: settings?.timeLimit || 30,
-        shuffle: settings?.shuffle ?? true,
-      },
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
+      settings,
+    });
 
-    // Save to MongoDB
-    const result = await db.collection("quizzes").insertOne(quizData);
-    
+    const quiz = await insertQuiz(db, quizData);
+
     logger.info("Quiz created successfully", {
-      quizId: result.insertedId.toString(),
+      quizId: quiz._id.toString(),
       title: quizData.title,
       questionCount: questions.length,
-      requestId: req.requestId
+      requestId: req.requestId,
     });
 
     res.status(201).json({
       success: true,
-      data: serializeQuiz({ _id: result.insertedId, ...quizData }),
+      data: serializeQuiz(quiz),
+    });
+  } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
+    next(error);
+  }
+};
+
+export const extractQuizFromDocument = async (req, res, next) => {
+  try {
+    logger.info("Processing document quiz extract", {
+      fileName: req.file?.originalname,
+      fileSize: req.file?.size,
+      requestId: req.requestId,
+    });
+
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+
+    const questions = await extractQuestionsFromDocument({
+      buffer: req.file.buffer,
+      mimeType: req.file.mimetype || "application/pdf",
+      fileName: req.file.originalname,
+    });
+
+    if (!questions.length) {
+      return res.status(400).json({ error: "No questions extracted from document" });
+    }
+
+    const validation = validateQuizData(questions);
+    if (!validation.valid) {
+      return res.status(400).json({
+        error: "Invalid quiz data",
+        details: validation.errors,
+      });
+    }
+
+    logger.info("Document quiz extracted successfully", {
+      fileName: req.file.originalname,
+      questionCount: questions.length,
+      requestId: req.requestId,
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        questions,
+        validation,
+        fileName: req.file.originalname,
+      },
     });
   } catch (error) {
     if (error.statusCode) {

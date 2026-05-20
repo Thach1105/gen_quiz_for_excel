@@ -4,25 +4,37 @@ import path from "path";
 // Configure multer for memory storage
 const storage = multer.memoryStorage();
 
-// File filter to accept only Excel files
-const fileFilter = (req, file, cb) => {
-  const allowedExtensions = [".xlsx", ".xls", ".csv"];
+const createExtensionFilter = (allowedExtensions, message) => (req, file, cb) => {
   const ext = path.extname(file.originalname).toLowerCase();
-  
+
   if (allowedExtensions.includes(ext)) {
     cb(null, true);
   } else {
-    cb(new Error("Invalid file type. Only Excel files (.xlsx, .xls, .csv) are allowed."), false);
+    cb(new Error(message), false);
   }
 };
 
-// Configure multer
-const upload = multer({
-  storage: storage,
-  fileFilter: fileFilter,
+const uploadExcelMulter = multer({
+  storage,
+  fileFilter: createExtensionFilter(
+    [".xlsx", ".xls", ".csv"],
+    "Invalid file type. Only Excel files (.xlsx, .xls, .csv) are allowed.",
+  ),
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
+    fileSize: 10 * 1024 * 1024,
   },
 });
 
-export const uploadExcel = upload.single("file");
+const uploadDocumentMulter = multer({
+  storage,
+  fileFilter: createExtensionFilter(
+    [".pdf"],
+    "Invalid file type. Only PDF files (.pdf) are allowed.",
+  ),
+  limits: {
+    fileSize: 20 * 1024 * 1024,
+  },
+});
+
+export const uploadExcel = uploadExcelMulter.single("file");
+export const uploadDocument = uploadDocumentMulter.single("file");

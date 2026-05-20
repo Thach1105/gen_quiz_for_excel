@@ -57,7 +57,7 @@ export default function PreviewSection({ questions = [] }) {
             <div className="py-12 text-center">
               <FileQuestion className="mx-auto mb-4 h-16 w-16 text-gray-300" />
               <h3 className="mb-2 text-xl font-bold text-gray-900">Chưa có câu hỏi</h3>
-              <p className="text-gray-600">Upload file Excel để xem preview câu hỏi</p>
+              <p className="text-gray-600">Upload file Excel hoặc PDF để xem preview câu hỏi</p>
             </div>
           </CardContent>
         </Card>

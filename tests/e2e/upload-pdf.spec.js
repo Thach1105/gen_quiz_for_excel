@@ -1,0 +1,137 @@
+import { test, expect } from "@playwright/test";
+import {
+  mockCreateQuiz,
+  mockDocumentExtractDelayed,
+  mockDocumentExtractSuccess,
+  mockQuizApi,
+} from "./helpers.js";
+
+test.describe("PDF Import Flow", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockQuizApi(page);
+    await page.goto("/");
+    await page.getByRole("button", { name: "PDF" }).click();
+  });
+
+  test("shows preview after successful PDF extraction", async ({ page }) => {
+    await mockDocumentExtractSuccess(page);
+
+    await page.locator("input[type='file']").setInputFiles({
+      name: "quiz-document.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("mock pdf"),
+    });
+
+    await expect(page.getByText("PDF question 1?")).toBeVisible();
+    await expect(page.getByText("Phân tích PDF thành công! Kiểm tra preview bên dưới trước khi tạo quiz.")).toBeVisible();
+  });
+
+  test("shows loading popup and allows cancelling import", async ({ page }) => {
+    await mockDocumentExtractDelayed(page, { delayMs: 5000 });
+
+    await page.locator("input[type='file']").setInputFiles({
+      name: "quiz-document.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("mock pdf"),
+    });
+
+    await expect(page.getByText("Đang phân tích tài liệu")).toBeVisible();
+    await page.getByRole("button", { name: "Hủy" }).click();
+
+    await expect(page.getByText("Đang phân tích tài liệu")).toHaveCount(0);
+    await expect(page.getByText("Đã hủy import PDF.")).toBeVisible();
+    await expect(page.getByText("PDF question 1?")).toHaveCount(0);
+  });
+
+  test("shows friendly popup for extraction errors and retries successfully", async ({ page }) => {
+    let callCount = 0;
+
+    await page.route("**/api/quiz/extract-from-document", async route => {
+      callCount += 1;
+      if (callCount === 1) {
+        await route.fulfill({
+          status: 502,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "quota exceeded" }),
+        });
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          data: {
+            questions: [
+              {
+                id: 1,
+                question: "Retry question?",
+                options: ["A", "B", "C", "D"],
+                answer: ["A"],
+                type: "Single choice",
+                explanation: "Retried successfully.",
+              },
+            ],
+            validation: {
+              valid: true,
+              errors: [],
+              warnings: [],
+              totalQuestions: 1,
+            },
+            fileName: "quiz-document.pdf",
+          },
+        }),
+      });
+    });
+
+    await page.locator("input[type='file']").setInputFiles({
+      name: "quiz-document.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("mock pdf"),
+    });
+
+    await expect(page.getByText("AI đang bận xử lý")).toBeVisible();
+    await page.getByRole("button", { name: "Thử lại" }).click();
+
+    await expect(page.getByText("Retry question?")).toBeVisible();
+    await expect.poll(() => callCount).toBe(2);
+  });
+
+  test("resets PDF preview so user can import again", async ({ page }) => {
+    await mockDocumentExtractSuccess(page);
+
+    await page.locator("input[type='file']").setInputFiles({
+      name: "quiz-document.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("mock pdf"),
+    });
+
+    await expect(page.getByText("PDF question 1?")).toBeVisible();
+    await page.getByRole("button", { name: "Xóa preview để làm lại" }).click();
+
+    await expect(page.getByText("PDF question 1?")).toHaveCount(0);
+    await expect(page.getByText("Chưa có câu hỏi")).toBeVisible();
+  });
+
+  test("creates quiz from PDF preview", async ({ page }) => {
+    let createPayload;
+
+    await mockDocumentExtractSuccess(page);
+    await mockCreateQuiz(page, (payload) => {
+      createPayload = payload;
+    });
+
+    await page.locator("input[type='file']").setInputFiles({
+      name: "quiz-document.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("mock pdf"),
+    });
+
+    await page.getByRole("button", { name: /Tạo bài quiz/i }).click();
+
+    await expect.poll(() => createPayload?.description).toBe("Quiz được tạo từ file PDF bằng Gemini");
+    expect(createPayload.questions).toHaveLength(2);
+    expect(createPayload.questions[0].question).toBe("PDF question 1?");
+  });
+});

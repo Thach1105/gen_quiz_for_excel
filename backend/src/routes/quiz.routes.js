@@ -1,6 +1,7 @@
 ﻿import express from "express";
 import {
   uploadExcelFile,
+  extractQuizFromDocument,
   createQuiz,
   getQuizById,
   getAllQuizzes,
@@ -11,7 +12,7 @@ import {
   updateCategory,
   deleteCategory,
 } from "../controllers/quiz.controller.js";
-import { uploadExcel } from "../middleware/upload.middleware.js";
+import { uploadDocument, uploadExcel } from "../middleware/upload.middleware.js";
 
 const router = express.Router();
 
@@ -21,6 +22,13 @@ const router = express.Router();
  * @access  Public
  */
 router.post("/upload", uploadExcel, uploadExcelFile);
+
+/**
+ * @route   POST /api/quiz/extract-from-document
+ * @desc    Extract quiz questions from PDF with Gemini
+ * @access  Public
+ */
+router.post("/extract-from-document", uploadDocument, extractQuizFromDocument);
 
 /**
  * @route   POST /api/quiz

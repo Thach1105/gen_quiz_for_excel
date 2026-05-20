@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Header from "@/components/Header";
 import HeroSection from "@/components/HeroSection";
@@ -6,7 +6,9 @@ import StepsSection from "@/components/StepsSection";
 import UploadSection from "@/components/UploadSection";
 import PreviewSection from "@/components/PreviewSection";
 import FooterSection from "@/components/FooterSection";
-import { createQuiz, getAllCategories } from "@/services/api";
+import ImportingModal from "@/components/ImportingModal";
+import ImportErrorModal from "@/components/ImportErrorModal";
+import { createQuiz, extractFromDocument, getAllCategories } from "@/services/api";
 
 const normalizeKeyword = (value) =>
   String(value || "")
@@ -35,8 +37,13 @@ export default function Home() {
   const [questions, setQuestions] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [importingDocument, setImportingDocument] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+  const [questionSource, setQuestionSource] = useState(null);
+  const [documentImportError, setDocumentImportError] = useState(null);
+  const abortControllerRef = useRef(null);
+  const lastDocumentFileRef = useRef(null);
 
   useEffect(() => {
     const fetchCategories = async () => {
@@ -53,19 +60,120 @@ export default function Home() {
     fetchCategories();
   }, []);
 
-  const handleQuestionsLoaded = (loadedQuestions) => {
-    setQuestions(loadedQuestions);
+  const getFriendlyDocumentImportError = (err) => {
+    const message = String(err?.message || "").toLowerCase();
+    if (message.includes("invalid quiz data") || message.includes("no questions extracted")) {
+      return {
+        title: "Chưa thể tạo câu hỏi từ tài liệu",
+        message: "Tài liệu này chưa được nhận diện thành bộ câu hỏi hợp lệ. Bạn hãy thử PDF khác hoặc điều chỉnh nội dung rồi import lại.",
+      };
+    }
+
+    if (
+      message.includes("quota")
+      || message.includes("resource_exhausted")
+      || message.includes("unavailable")
+      || message.includes("overloaded")
+      || message.includes("internal error")
+      || message.includes("empty response")
+    ) {
+      return {
+        title: "AI đang bận xử lý",
+        message: "Hệ thống AI hiện chưa xử lý được tài liệu này. Bạn vui lòng thử lại sau ít phút hoặc chọn lại file để import lại.",
+      };
+    }
+
+    return {
+      title: "Chưa thể tạo câu hỏi từ tài liệu",
+      message: "Đã có lỗi khi phân tích PDF. Bạn hãy thử lại hoặc chọn một tài liệu khác.",
+    };
+  };
+
+  const resetDocumentPreview = () => {
+    setQuestions([]);
+    setQuestionSource(null);
+    setSuccess(null);
     setError(null);
-    setSuccess("Upload thành công! Kiểm tra preview bên dưới.");
-    
+    setDocumentImportError(null);
+  };
+
+  const handleQuestionsLoaded = (loadedQuestions, source = "excel") => {
+    setQuestions(loadedQuestions);
+    setQuestionSource(source);
+    setError(null);
+    setDocumentImportError(null);
+    setSuccess(
+      source === "document"
+        ? "Phân tích PDF thành công! Kiểm tra preview bên dưới trước khi tạo quiz."
+        : "Upload thành công! Kiểm tra preview bên dưới.",
+    );
+
     setTimeout(() => {
       document.getElementById("preview")?.scrollIntoView({ behavior: "smooth" });
     }, 300);
   };
 
+  const handleCancelImport = () => {
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    setImportingDocument(false);
+    setDocumentImportError(null);
+    setSuccess("Đã hủy import PDF.");
+  };
+
+  const handleCloseDocumentError = () => {
+    setDocumentImportError(null);
+  };
+
+  const handleDocumentImport = async (file) => {
+    if (!file) return;
+
+    lastDocumentFileRef.current = file;
+    setError(null);
+    setSuccess(null);
+    setDocumentImportError(null);
+    setImportingDocument(true);
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    try {
+      const response = await extractFromDocument(file, controller.signal);
+      if (response.success) {
+        handleQuestionsLoaded(response.data.questions, "document");
+      }
+    } catch (err) {
+      if (err.name === "AbortError") {
+        return;
+      }
+      const friendlyError = getFriendlyDocumentImportError(err);
+      setDocumentImportError(friendlyError);
+      setError(null);
+    } finally {
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
+      setImportingDocument(false);
+    }
+  };
+
+  const handleRetryDocumentImport = async () => {
+    if (!lastDocumentFileRef.current) {
+      setDocumentImportError(null);
+      return;
+    }
+
+    setDocumentImportError(null);
+    await handleDocumentImport(lastDocumentFileRef.current);
+  };
+
   const handleCreateQuiz = async (settings) => {
     if (questions.length === 0) {
-      setError("Không có câu hỏi để tạo quiz");
+      setError(
+        settings.mode === "document"
+          ? "Chưa có câu hỏi từ PDF để tạo quiz"
+          : "Không có câu hỏi để tạo quiz",
+      );
       return;
     }
 
@@ -79,7 +187,10 @@ export default function Home() {
           fileName: settings.fileName,
           questions,
         }),
-        description: "Quiz được tạo từ file Excel",
+        description:
+          settings.mode === "document"
+            ? "Quiz được tạo từ file PDF bằng Gemini"
+            : "Quiz được tạo từ file Excel",
         questions,
         categoryId: settings.categoryId || null,
         settings: {
@@ -89,9 +200,9 @@ export default function Home() {
       };
 
       const response = await createQuiz(quizData);
-      
+
       if (response.success) {
-        setSuccess(`Tạo quiz thành công! Đang chuyển đến danh sách quiz...`);
+        setSuccess("Tạo quiz thành công! Đang chuyển đến danh sách quiz...");
         setTimeout(() => {
           navigate("/quizzes");
         }, 1500);
@@ -114,6 +225,15 @@ export default function Home() {
       <Header />
 
       <main className="relative z-10 mx-auto max-w-7xl px-6 pb-16">
+        <ImportingModal visible={importingDocument} onCancel={handleCancelImport} />
+        <ImportErrorModal
+          visible={Boolean(documentImportError)}
+          title={documentImportError?.title}
+          message={documentImportError?.message}
+          onClose={handleCloseDocumentError}
+          onRetry={lastDocumentFileRef.current ? handleRetryDocumentImport : null}
+        />
+
         {success && (
           <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
             {success}
@@ -126,7 +246,7 @@ export default function Home() {
         )}
         {loading && (
           <div className="mb-6 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-700">
-            Đang xử lý...
+            Đang tạo quiz...
           </div>
         )}
 
@@ -135,7 +255,10 @@ export default function Home() {
         <UploadSection
           categories={categories}
           onQuestionsLoaded={handleQuestionsLoaded}
+          onDocumentImport={handleDocumentImport}
           onCreateQuiz={handleCreateQuiz}
+          onResetDocumentPreview={resetDocumentPreview}
+          hasDocumentPreview={questionSource === "document" && questions.length > 0}
         />
         <PreviewSection questions={questions} />
         <FooterSection />

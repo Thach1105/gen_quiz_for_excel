@@ -25,6 +25,24 @@ export const uploadExcelFile = async (file) => {
   }
 };
 
+export const extractFromDocument = async (file, signal) => {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await fetch(`${API_URL}/api/quiz/extract-from-document`, {
+    method: "POST",
+    body: formData,
+    signal,
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to extract quiz from document");
+  }
+
+  return await response.json();
+};
+
 /**
  * Create a new quiz
  */

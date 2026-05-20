@@ -50,6 +50,25 @@ export const mockCategories = [
   { id: "cat-tablet", name: "Viên nén", parentId: "cat-pharma" },
 ];
 
+export const mockDocumentQuestions = [
+  {
+    id: 1,
+    question: "PDF question 1?",
+    options: ["Option A", "Option B", "Option C", "Option D"],
+    answer: ["Option A"],
+    type: "Single choice",
+    explanation: "Explanation for PDF question 1.",
+  },
+  {
+    id: 2,
+    question: "PDF question 2?",
+    options: ["Choice 1", "Choice 2", "Choice 3", "Choice 4"],
+    answer: ["Choice 2", "Choice 3"],
+    type: "Multiple choice",
+    explanation: "Explanation for PDF question 2.",
+  },
+];
+
 export const mockQuizApi = async (page, quiz = mockQuiz) => {
   await page.route("**/api/quiz/categories", async route => {
     await route.fulfill({
@@ -109,5 +128,80 @@ export const mockQuizApi = async (page, quiz = mockQuiz) => {
         data: mockFastTimerQuiz,
       }),
     });
+  });
+};
+
+export const mockDocumentExtractSuccess = async (page, questions = mockDocumentQuestions, fileName = "quiz-document.pdf") => {
+  await page.route("**/api/quiz/extract-from-document", async route => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        data: {
+          questions,
+          validation: {
+            valid: true,
+            errors: [],
+            warnings: [],
+            totalQuestions: questions.length,
+          },
+          fileName,
+        },
+      }),
+    });
+  });
+};
+
+export const mockDocumentExtractError = async (page, { status = 502, error = "Failed to extract quiz from document" } = {}) => {
+  await page.route("**/api/quiz/extract-from-document", async route => {
+    await route.fulfill({
+      status,
+      contentType: "application/json",
+      body: JSON.stringify({ error }),
+    });
+  });
+};
+
+export const mockDocumentExtractDelayed = async (page, { delayMs = 3000, response } = {}) => {
+  await page.route("**/api/quiz/extract-from-document", async route => {
+    await new Promise(resolve => setTimeout(resolve, delayMs));
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(response || {
+        success: true,
+        data: {
+          questions: mockDocumentQuestions,
+          validation: {
+            valid: true,
+            errors: [],
+            warnings: [],
+            totalQuestions: mockDocumentQuestions.length,
+          },
+          fileName: "quiz-document.pdf",
+        },
+      }),
+    });
+  });
+};
+
+export const mockCreateQuiz = async (page, onCreate) => {
+  await page.route("**/api/quiz", async route => {
+    if (route.request().method() === "POST") {
+      const payload = route.request().postDataJSON();
+      onCreate?.(payload);
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          data: { id: "created-quiz", ...payload },
+        }),
+      });
+      return;
+    }
+
+    await route.fallback();
   });
 };
