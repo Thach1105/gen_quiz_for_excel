@@ -1,7 +1,27 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../src/services/pdf.service.js", () => ({
-  extractTextFromPdfBuffer: vi.fn(async () => "Question 1?\nA. Option A\nB. Option B\nC. Option C\nD. Option D"),
+const { generateContentMock, googleGenAIConstructorMock } = vi.hoisted(() => {
+  const generateContent = vi.fn();
+  const GoogleGenAI = vi.fn(function () {
+    this.models = {
+      generateContent,
+    };
+  });
+  return {
+    generateContentMock: generateContent,
+    googleGenAIConstructorMock: GoogleGenAI,
+  };
+});
+
+vi.mock("@google/genai", () => ({
+  GoogleGenAI: googleGenAIConstructorMock,
+  Type: {
+    ARRAY: "ARRAY",
+    OBJECT: "OBJECT",
+    STRING: "STRING",
+  },
+  createPartFromText: vi.fn(text => ({ type: "text", text })),
+  createUserContent: vi.fn(parts => parts),
 }));
 
 import {
@@ -17,27 +37,25 @@ import {
 } from "../src/services/ai.service.js";
 
 const originalEnv = { ...process.env };
-const originalFetch = global.fetch;
 
 beforeEach(() => {
-  global.fetch = vi.fn();
+  generateContentMock.mockReset();
+  googleGenAIConstructorMock.mockClear();
 });
 
 afterEach(() => {
   process.env = { ...originalEnv };
-  global.fetch = originalFetch;
   vi.restoreAllMocks();
 });
 
 describe("ai.service helpers", () => {
-  it("buildPrompt includes formatting example and extracted document text", () => {
-    const prompt = buildPrompt("Question 1?\nA. Option A\nB. Option B");
+  it("buildPrompt includes the Gemini extraction instructions and formatting example", () => {
+    const prompt = buildPrompt();
 
     expect(prompt).toContain("Example JSON item");
     expect(prompt).toContain("Thủ đô của Việt Nam là gì?");
     expect(prompt).toContain("The answer array must contain the exact option text values from options.");
-    expect(prompt).toContain("Document text begins below:");
-    expect(prompt).toContain("Question 1?");
+    expect(prompt).toContain("Read the entire document carefully");
   });
 
   it("detects question type labels in English and Vietnamese-like text", () => {
@@ -47,9 +65,8 @@ describe("ai.service helpers", () => {
     expect(isQuestionTypeText("Đây là đáp án đúng")).toBe(false);
   });
 
-  it("throws when AI api key is missing", async () => {
-    process.env.AI_API_URL = "https://example.com/v1/chat/completions";
-    delete process.env.AI_API_KEY;
+  it("throws when Gemini api key is missing", async () => {
+    process.env.AI_PROVIDER = "gemini";
     delete process.env.GEMINI_API_KEY;
 
     await expect(extractQuestionsFromDocument({
@@ -57,32 +74,25 @@ describe("ai.service helpers", () => {
       mimeType: "application/pdf",
       fileName: "sample.pdf",
     })).rejects.toMatchObject({
-      message: "Missing AI_API_KEY",
+      message: "Missing GEMINI_API_KEY",
       statusCode: 500,
     });
   });
 
-  it("extracts questions via configured AI endpoint", async () => {
-    process.env.AI_API_URL = "https://example.com/v1/chat/completions";
-    process.env.AI_API_KEY = "test-key";
-    process.env.AI_MODEL = "model-primary";
-    global.fetch.mockResolvedValue({
-      ok: true,
-      text: async () => JSON.stringify({
-        choices: [{
-          message: {
-            content: JSON.stringify([
-              {
-                question: "Question 1?",
-                options: ["Option A", "Option B", "Option C", "Option D"],
-                answer: ["Option A"],
-                type: "Single choice",
-                explanation: "Because A is correct",
-              },
-            ]),
-          },
-        }],
-      }),
+  it("extracts questions via Gemini inline PDF input", async () => {
+    process.env.AI_PROVIDER = "gemini";
+    process.env.GEMINI_API_KEY = "test-key";
+    process.env.AI_MODEL = "models/gemini-test";
+    generateContentMock.mockResolvedValue({
+      text: JSON.stringify([
+        {
+          question: "Question 1?",
+          options: ["Option A", "Option B", "Option C", "Option D"],
+          answer: ["Option A"],
+          type: "Single choice",
+          explanation: "Because A is correct",
+        },
+      ]),
     });
 
     const result = await extractQuestionsFromDocument({
@@ -91,18 +101,25 @@ describe("ai.service helpers", () => {
       fileName: "sample.pdf",
     });
 
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-    expect(global.fetch).toHaveBeenCalledWith(
-      "https://example.com/v1/chat/completions",
-      expect.objectContaining({
-        method: "POST",
-        headers: expect.objectContaining({
-          Authorization: "Bearer test-key",
-          "Content-Type": "application/json",
+    expect(googleGenAIConstructorMock).toHaveBeenCalledWith({ apiKey: "test-key" });
+    expect(generateContentMock).toHaveBeenCalledTimes(1);
+    expect(generateContentMock).toHaveBeenCalledWith(expect.objectContaining({
+      model: "models/gemini-test",
+      contents: expect.arrayContaining([
+        expect.objectContaining({
+          inlineData: {
+            mimeType: "application/pdf",
+            data: Buffer.from("fake-pdf").toString("base64"),
+          },
         }),
-        body: expect.stringContaining("Document text begins below:"),
+        expect.objectContaining({ type: "text" }),
+      ]),
+      config: expect.objectContaining({
+        responseMimeType: "application/json",
+        temperature: 0,
+        maxOutputTokens: 65536,
       }),
-    );
+    }));
     expect(result).toEqual([
       {
         id: 1,
@@ -115,103 +132,25 @@ describe("ai.service helpers", () => {
     ]);
   });
 
-  it("auto-appends chat completions endpoint for base /v1 urls", async () => {
-    process.env.AI_API_URL = "http://103.160.2.147:20128/v1";
-    process.env.AI_API_KEY = "test-key";
-    process.env.AI_MODEL = "kr/claude-sonnet-4.5";
-    global.fetch.mockResolvedValue({
-      ok: true,
-      text: async () => JSON.stringify({
-        choices: [{
-          message: {
-            content: JSON.stringify([
-              {
-                question: "Base URL question?",
-                options: ["A", "B", "C", "D"],
-                answer: ["A"],
-                type: "Single choice",
-                explanation: "Resolved endpoint correctly",
-              },
-            ]),
+  it("falls back to next Gemini model when provider returns retryable error", async () => {
+    process.env.AI_PROVIDER = "gemini";
+    process.env.GEMINI_API_KEY = "test-key";
+    process.env.AI_MODEL = "models/missing-model";
+    process.env.AI_MODEL_FALLBACKS = "models/working-model";
+
+    const retryableError = new Error('{"error":{"code":404,"status":"NOT_FOUND","message":"model not found"}}');
+    generateContentMock
+      .mockRejectedValueOnce(retryableError)
+      .mockResolvedValueOnce({
+        text: JSON.stringify([
+          {
+            question: "Recovered question?",
+            options: ["A", "B", "C", "D"],
+            answer: ["B"],
+            type: "Single choice",
+            explanation: "Recovered by fallback",
           },
-        }],
-      }),
-    });
-
-    const result = await extractQuestionsFromDocument({
-      buffer: Buffer.from("fake-pdf"),
-      mimeType: "application/pdf",
-      fileName: "sample.pdf",
-    });
-
-    expect(global.fetch).toHaveBeenCalledWith(
-      "http://103.160.2.147:20128/v1/chat/completions",
-      expect.any(Object),
-    );
-    expect(result[0].question).toBe("Base URL question?");
-  });
-
-  it("parses SSE-style data responses from 9router", async () => {
-    process.env.AI_API_URL = "http://103.160.2.147:20128/v1";
-    process.env.AI_API_KEY = "test-key";
-    process.env.AI_MODEL = "kr/claude-sonnet-4.5";
-    global.fetch.mockResolvedValue({
-      ok: true,
-      text: async () => [
-        'data: {"id":"chatcmpl-1","choices":[{"message":{"content":"[{\\"question\\":\\"SSE question?\\",\\"options\\":[\\"A\\",\\"B\\",\\"C\\",\\"D\\"],\\"answer\\":[\\"C\\"],\\"type\\":\\"Single choice\\",\\"explanation\\":\\"Parsed from SSE\\"}]"}}]}',
-        "data: [DONE]",
-      ].join("\n"),
-    });
-
-    const result = await extractQuestionsFromDocument({
-      buffer: Buffer.from("fake-pdf"),
-      mimeType: "application/pdf",
-      fileName: "sample.pdf",
-    });
-
-    expect(result).toEqual([
-      {
-        id: 1,
-        question: "SSE question?",
-        options: ["A", "B", "C", "D"],
-        answer: ["C"],
-        type: "Single choice",
-        explanation: "Parsed from SSE",
-      },
-    ]);
-  });
-
-  it("falls back to next model when provider returns retryable error", async () => {
-    process.env.AI_API_URL = "https://example.com/v1/chat/completions";
-    process.env.AI_API_KEY = "test-key";
-    process.env.AI_MODEL = "missing-model";
-    process.env.AI_MODEL_FALLBACKS = "working-model";
-
-    global.fetch
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-        statusText: "Not Found",
-        json: async () => ({ error: { message: "model not found", code: 404, status: "NOT_FOUND" } }),
-        text: async () => JSON.stringify({ error: { message: "model not found", code: 404, status: "NOT_FOUND" } }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        text: async () => JSON.stringify({
-          choices: [{
-            message: {
-              content: JSON.stringify([
-                {
-                  question: "Recovered question?",
-                  options: ["A", "B", "C", "D"],
-                  answer: ["B"],
-                  type: "Single choice",
-                  explanation: "Recovered by fallback",
-                },
-              ]),
-            },
-          }],
-        }),
+        ]),
       });
 
     const result = await extractQuestionsFromDocument({
@@ -220,17 +159,24 @@ describe("ai.service helpers", () => {
       fileName: "sample.pdf",
     });
 
-    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(generateContentMock).toHaveBeenCalledTimes(2);
+    expect(generateContentMock.mock.calls[0][0].model).toBe("models/missing-model");
+    expect(generateContentMock.mock.calls[1][0].model).toBe("models/working-model");
     expect(result[0].question).toBe("Recovered question?");
   });
 
-  it("returns empty api key when AI_API_KEY is absent", () => {
-    process.env.AI_API_URL = "https://example.com/v1/chat/completions";
-    delete process.env.AI_API_KEY;
+  it("rejects unsupported providers", async () => {
+    process.env.AI_PROVIDER = "generic";
+    process.env.GEMINI_API_KEY = "test-key";
 
-    const config = getAiConfig();
-
-    expect(config.apiKey).toBe("");
+    await expect(extractQuestionsFromDocument({
+      buffer: Buffer.from("fake"),
+      mimeType: "application/pdf",
+      fileName: "sample.pdf",
+    })).rejects.toMatchObject({
+      message: "Unsupported AI_PROVIDER: generic",
+      statusCode: 500,
+    });
   });
 
   it("normalizes questions and removes invalid options and answers", () => {
@@ -238,7 +184,7 @@ describe("ai.service helpers", () => {
       {
         question: "Câu hỏi 1?",
         options: ["Single choice", "Đáp án A", "Đáp án B", ""],
-        answer: ["Single choice", "Đáp án B"],
+        answer: ["Đáp án B"],
         type: "Single choice",
         explanation: "Giải thích 1",
       },
@@ -263,10 +209,86 @@ describe("ai.service helpers", () => {
     ]);
   });
 
+  it("maps answer letters to full option text", () => {
+    const result = normalizeQuestions([
+      {
+        question: "Câu 12?",
+        options: [
+          "A. Dạng thuốc thứ nhất",
+          "B. Đóng nhiều dạng thuốc vào cùng nang cứng",
+          "C. Dạng thuốc thứ ba",
+          "D. Dạng thuốc thứ tư",
+        ],
+        answer: ["B"],
+        type: "Single choice",
+        explanation: "",
+      },
+    ]);
+
+    expect(result).toEqual([
+      {
+        id: 1,
+        question: "Câu 12?",
+        options: [
+          "Dạng thuốc thứ nhất",
+          "Đóng nhiều dạng thuốc vào cùng nang cứng",
+          "Dạng thuốc thứ ba",
+          "Dạng thuốc thứ tư",
+        ],
+        answer: ["Đóng nhiều dạng thuốc vào cùng nang cứng"],
+        type: "Single choice",
+        explanation: "",
+      },
+    ]);
+  });
+
+  it("maps Vietnamese answer labels to full option text", () => {
+    const result = normalizeQuestions([
+      {
+        question: "Câu hỏi có đáp án nhãn?",
+        options: ["A) Lựa chọn một", "B) Lựa chọn hai", "C) Lựa chọn ba", "D) Lựa chọn bốn"],
+        answer: ["Đáp án: B"],
+        type: "Single choice",
+        explanation: "",
+      },
+    ]);
+
+    expect(result[0].answer).toEqual(["Lựa chọn hai"]);
+  });
+
+  it("maps multiple answer letters and derives multiple choice", () => {
+    const result = normalizeQuestions([
+      {
+        question: "Chọn nhiều đáp án đúng?",
+        options: ["A. Ý một", "B. Ý hai", "C. Ý ba", "D. Ý bốn"],
+        answer: ["A,C"],
+        type: "Single choice",
+        explanation: "",
+      },
+    ]);
+
+    expect(result[0].answer).toEqual(["Ý một", "Ý ba"]);
+    expect(result[0].type).toBe("Multiple choice");
+  });
+
+  it("drops questions without a valid mapped answer", () => {
+    const result = normalizeQuestions([
+      {
+        question: "Không có đáp án hợp lệ?",
+        options: ["A. Ý một", "B. Ý hai"],
+        answer: ["Z"],
+        type: "Single choice",
+        explanation: "",
+      },
+    ]);
+
+    expect(result).toEqual([]);
+  });
+
   it("derives multiple choice from answer count when needed", () => {
-    expect(normalizeQuestionType("", ["A", "B"])) .toBe("Multiple choice");
-    expect(normalizeQuestionType("", ["A"])) .toBe("Single choice");
-    expect(normalizeQuestionType("Multiple choice", ["A"])) .toBe("Multiple choice");
+    expect(normalizeQuestionType("", ["A", "B"])).toBe("Multiple choice");
+    expect(normalizeQuestionType("", ["A"])).toBe("Single choice");
+    expect(normalizeQuestionType("Multiple choice", ["A"])).toBe("Multiple choice");
   });
 
   it("parses embedded API error payloads", () => {
@@ -293,18 +315,14 @@ describe("ai.service helpers", () => {
     expect(shouldTryNextModel({ statusCode: 400, status: "INVALID_ARGUMENT", message: "bad prompt" })).toBe(false);
   });
 
-  it("builds AI config from env and de-duplicates models", () => {
-    process.env.AI_PROVIDER = "generic";
-    process.env.AI_API_URL = "https://example.com/v1/chat/completions";
-    process.env.AI_API_KEY = "test-key";
+  it("builds Gemini config from env and de-duplicates models", () => {
+    process.env.AI_PROVIDER = "gemini";
     process.env.AI_MODEL = "models/custom-primary";
     process.env.AI_MODEL_FALLBACKS = "models/custom-secondary, models/custom-primary, models/custom-tertiary";
 
     const config = getAiConfig();
 
-    expect(config.provider).toBe("generic");
-    expect(config.apiUrl).toBe("https://example.com/v1/chat/completions");
-    expect(config.apiKey).toBe("test-key");
+    expect(config.provider).toBe("gemini");
     expect(config.primaryModel).toBe("models/custom-primary");
     expect(config.models.slice(0, 3)).toEqual([
       "models/custom-primary",
