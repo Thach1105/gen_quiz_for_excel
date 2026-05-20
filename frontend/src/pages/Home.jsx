@@ -252,15 +252,17 @@ export default function Home() {
 
         <HeroSection />
         <StepsSection />
-        <UploadSection
-          categories={categories}
-          onQuestionsLoaded={handleQuestionsLoaded}
-          onDocumentImport={handleDocumentImport}
-          onCreateQuiz={handleCreateQuiz}
-          onResetDocumentPreview={resetDocumentPreview}
-          hasDocumentPreview={questionSource === "document" && questions.length > 0}
-        />
-        <PreviewSection questions={questions} />
+        <div className="grid items-start gap-6 lg:grid-cols-[0.92fr_1.08fr]">
+          <UploadSection
+            categories={categories}
+            onQuestionsLoaded={handleQuestionsLoaded}
+            onDocumentImport={handleDocumentImport}
+            onCreateQuiz={handleCreateQuiz}
+            onResetDocumentPreview={resetDocumentPreview}
+            hasDocumentPreview={questionSource === "document" && questions.length > 0}
+          />
+          <PreviewSection questions={questions} />
+        </div>
         <FooterSection />
       </main>
     </div>

@@ -51,9 +51,9 @@ export default function PreviewSection({ questions = [] }) {
 
   if (questions.length === 0) {
     return (
-      <section className="py-12">
-        <Card id="preview" className="rounded-[2rem] border-2 border-gray-200 bg-white shadow-xl">
-          <CardContent className="p-6">
+      <section className="py-6 lg:py-8">
+        <Card id="preview" className="min-h-0 rounded-[2rem] border-2 border-gray-200 bg-white shadow-xl lg:h-[68rem] xl:h-[75rem]">
+          <CardContent className="flex h-full flex-col p-6">
             <div className="py-12 text-center">
               <FileQuestion className="mx-auto mb-4 h-16 w-16 text-gray-300" />
               <h3 className="mb-2 text-xl font-bold text-gray-900">Chưa có câu hỏi</h3>
@@ -66,10 +66,10 @@ export default function PreviewSection({ questions = [] }) {
   }
 
   return (
-    <section className="py-12">
-      <Card id="preview" className="rounded-[2rem] border-2 border-gray-200 bg-white shadow-xl">
-        <CardContent className="p-6">
-          <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+    <section className="py-6 lg:py-8">
+      <Card id="preview" className="min-h-0 rounded-[2rem] border-2 border-gray-200 bg-white shadow-xl lg:h-[68rem] xl:h-[75rem]">
+        <CardContent className="flex h-full flex-col p-6">
+          <div className="mb-4 flex flex-shrink-0 flex-wrap items-center justify-between gap-4">
             <div>
               <h3 className="text-2xl font-bold text-gray-900">Preview câu hỏi</h3>
               <p className="text-sm text-gray-600">
@@ -95,7 +95,7 @@ export default function PreviewSection({ questions = [] }) {
             </div>
           </div>
 
-          <div className="max-h-[600px] space-y-3 overflow-y-auto pr-2">
+          <div data-testid="preview-question-list" className="preview-scroll min-h-0 flex-1 space-y-3 overflow-y-auto rounded-2xl pr-2">
             {questions.map((item, idx) => {
               const isExpanded = expandedQuestions.has(item.id);
               return (

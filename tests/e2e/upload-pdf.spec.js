@@ -114,6 +114,71 @@ test.describe("PDF Import Flow", () => {
     await expect(page.getByText("Chưa có câu hỏi")).toBeVisible();
   });
 
+  test("keeps long PDF preview inside a fixed-height scroll area", async ({ page }) => {
+    const questions = Array.from({ length: 50 }, (_, index) => ({
+      id: index + 1,
+      question: `Long PDF question ${index + 1}?`,
+      options: ["Option A", "Option B", "Option C", "Option D"],
+      answer: ["Option A"],
+      type: "Single choice",
+      explanation: "Generated for long preview layout.",
+    }));
+
+    await page.route("**/api/quiz/extract-from-document", async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          success: true,
+          data: {
+            questions,
+            validation: {
+              valid: true,
+              errors: [],
+              warnings: [],
+              totalQuestions: questions.length,
+            },
+            fileName: "long-quiz-document.pdf",
+          },
+        }),
+      });
+    });
+
+    await page.locator("input[type='file']").setInputFiles({
+      name: "long-quiz-document.pdf",
+      mimeType: "application/pdf",
+      buffer: Buffer.from("mock pdf"),
+    });
+
+    const previewCard = page.locator("#preview");
+    const previewList = previewCard.locator("[data-testid='preview-question-list']");
+
+    await expect(page.getByText("Long PDF question 1?")).toBeVisible();
+    await expect(page.getByText("Long PDF question 50?")).not.toBeInViewport();
+
+    const dimensions = await page.evaluate(() => {
+      const upload = document.querySelector("#upload");
+      const preview = document.querySelector("#preview");
+      const list = document.querySelector("[data-testid='preview-question-list']");
+      return {
+        uploadHeight: upload?.getBoundingClientRect().height || 0,
+        previewHeight: preview?.getBoundingClientRect().height || 0,
+        listClientHeight: list?.clientHeight || 0,
+        listScrollHeight: list?.scrollHeight || 0,
+      };
+    });
+
+    expect(dimensions.previewHeight).toBeGreaterThan(1000);
+    expect(dimensions.previewHeight).toBeGreaterThanOrEqual(dimensions.uploadHeight - 80);
+    expect(dimensions.listClientHeight).toBeLessThan(dimensions.previewHeight);
+    expect(dimensions.listScrollHeight).toBeGreaterThan(dimensions.listClientHeight);
+
+    await previewList.evaluate(node => {
+      node.scrollTop = node.scrollHeight;
+    });
+    await expect(page.getByText("Long PDF question 50?")).toBeVisible();
+  });
+
   test("creates quiz from PDF preview", async ({ page }) => {
     let createPayload;
 

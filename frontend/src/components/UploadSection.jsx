@@ -153,7 +153,7 @@ export default function UploadSection({
   const FileIcon = mode === "excel" ? FileSpreadsheet : FileText;
 
   return (
-    <section className="py-12">
+    <section className="py-6 lg:py-8">
       <Card id="upload" className="rounded-[2rem] border-2 border-gray-200 bg-white shadow-xl">
         <CardContent className="p-6">
           <div className="mb-6">
