@@ -129,12 +129,17 @@ export const normalizeQuestions = (questions) => {
 };
 
 export const buildPrompt = () => [
-  "Read this document and extract quiz questions into JSON.",
-  "Return only questions that clearly have a question statement and at least two answer options.",
+  "Read the entire document carefully and extract as many quiz questions as possible into JSON.",
+  "Your priority is completeness: do not stop early, do not summarize, and do not return only a sample.",
+  "If the document contains around dozens of questions, return all valid questions you can find, in the same order as the source.",
+  "Treat every numbered question, bullet question, or clearly separated question block as a candidate question.",
+  "Only skip content that is clearly not a question or does not contain enough information to form at least two answer options.",
+  "Do not merge multiple source questions into one JSON item and do not drop later questions just because earlier ones were extracted successfully.",
   "Use 'Single choice' when there is one correct answer and 'Multiple choice' when there are multiple correct answers.",
   "If the source provides no explanation, return an empty explanation string.",
   "The answer array must contain the exact option text values from options.",
-  "Options must contain only answer texts and must never contain labels like 'Single choice', 'Multiple choice', 'True/False', or instructions.",
+  "Options must contain only answer texts and must never contain labels like 'Single choice', 'Multiple choice', 'True/False', question numbers, or instructions.",
+  "Preserve mathematical symbols, medical terms, abbreviations, and answer text faithfully from the source.",
   "The following example is only a formatting example. Do not copy its content unless it actually appears in the document.",
   `Example JSON item: ${JSON.stringify({
     question: "Thủ đô của Việt Nam là gì?",
